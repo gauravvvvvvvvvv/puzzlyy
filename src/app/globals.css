@@ -1,0 +1,461 @@
+@import 'tailwindcss';
+
+/* ==========================================================================
+   Puzzly design system
+   --------------------------------------------------------------------------
+   Cozy + modern + playful + premium. Warm ink surfaces, one apricot accent,
+   soft borders instead of heavy shadows, and a very faint paper grain so the
+   dark UI does not read as flat corporate black.
+   ========================================================================== */
+
+@theme {
+  /* --- Palette ---------------------------------------------------------- */
+  --color-ink-950: #100e15;
+  --color-ink-900: #16131c;
+  --color-ink-850: #1b1823;
+  --color-ink-800: #211d2b;
+  --color-ink-700: #2b2637;
+  --color-ink-600: #3a3448;
+  --color-ink-500: #514a63;
+  --color-ink-400: #6f6784;
+  --color-ink-300: #948ca8;
+  --color-ink-200: #bcb5c9;
+  --color-ink-100: #ddd8e5;
+  --color-ink-50: #f2eff6;
+
+  --color-paper-50: #fbf9f5;
+  --color-paper-100: #f5f1e9;
+  --color-paper-200: #eae4d8;
+  --color-paper-300: #d9d1c2;
+
+  /* Apricot — the single accent. Used for primary action + brand. */
+  --color-apricot-300: #ffc4a3;
+  --color-apricot-400: #ffa578;
+  --color-apricot-500: #ff8a5b;
+  --color-apricot-600: #f26f3d;
+  --color-apricot-700: #cf5525;
+
+  /* Mint — connected / success / "in sync". */
+  --color-mint-300: #a8e6d6;
+  --color-mint-400: #7dd3c0;
+  --color-mint-500: #4fbfa6;
+  --color-mint-600: #2f9d86;
+
+  /* Player identity colours (also mirrored in lib/multiplayer/colors.ts) */
+  --color-player-1: #ff8a5b;
+  --color-player-2: #7dd3c0;
+  --color-player-3: #b79bff;
+  --color-player-4: #ffd166;
+  --color-player-5: #ff8fa3;
+  --color-player-6: #7cc5ff;
+
+  --color-butter-400: #ffd166;
+  --color-lilac-400: #b79bff;
+  --color-rose-400: #ff8fa3;
+  --color-sky-400: #7cc5ff;
+  --color-danger-400: #ff7a7a;
+  --color-danger-500: #e94f4f;
+
+  /* --- Type ------------------------------------------------------------- */
+  /* Supplied by next/font in app/layout.tsx. The fallback inside each var()
+     matters: if the variable is missing the whole declaration would otherwise
+     be invalid and text would fall back to Times. */
+  --font-display: var(--font-display-face, 'Iowan Old Style'), 'Palatino Linotype', Georgia, serif;
+  --font-sans: var(--font-sans-face, ui-sans-serif), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: var(--font-mono-face, ui-monospace), 'SFMono-Regular', 'Cascadia Mono', monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  /* --- Radii ------------------------------------------------------------ */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 11px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 24px;
+
+  /* --- Motion ----------------------------------------------------------- */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.46, 0.64, 1);
+
+  --animate-rise: rise 0.5s var(--ease-out-soft) both;
+  --animate-fade-in: fade-in 0.35s var(--ease-out-soft) both;
+  --animate-pop: pop 0.28s var(--ease-spring) both;
+  --animate-float-up: float-up 1.5s var(--ease-out-soft) both;
+  --animate-drift: drift 18s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-pulse-ring: pulse-ring 1.6s var(--ease-out-soft) infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, 0, 0) scale(0.7);
+  }
+  18% {
+    opacity: 1;
+    transform: translate3d(-50%, -14px, 0) scale(1.12);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, -76px, 0) scale(0.95);
+  }
+}
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(0, -12px, 0) rotate(1.5deg);
+  }
+}
+@keyframes shimmer {
+  from {
+    background-position: -180% 0;
+  }
+  to {
+    background-position: 180% 0;
+  }
+}
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+/* ==========================================================================
+   Semantic tokens — light is the base, dark overrides only what changes.
+   ========================================================================== */
+
+:root {
+  --bg: var(--color-paper-100);
+  --bg-deep: var(--color-paper-200);
+  --surface: #ffffff;
+  --surface-2: var(--color-paper-50);
+  --surface-3: var(--color-paper-200);
+  --surface-inset: rgba(16, 14, 21, 0.04);
+  --line: rgba(16, 14, 21, 0.1);
+  --line-strong: rgba(16, 14, 21, 0.18);
+  --fg: #201c28;
+  --fg-muted: #5f596d;
+  --fg-subtle: #857e93;
+  --accent: var(--color-apricot-600);
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(242, 111, 61, 0.12);
+  --ring: rgba(242, 111, 61, 0.5);
+  --shadow-soft: 0 1px 2px rgba(16, 14, 21, 0.06), 0 8px 24px -12px rgba(16, 14, 21, 0.18);
+  --shadow-lift: 0 2px 4px rgba(16, 14, 21, 0.07), 0 18px 48px -20px rgba(16, 14, 21, 0.28);
+  --grain-opacity: 0.4;
+  --board-bg: #e7e0d3;
+  --board-slot: rgba(16, 14, 21, 0.07);
+  color-scheme: light;
+}
+
+:root[data-theme='dark'],
+:root:not([data-theme='light']) {
+  --bg: var(--color-ink-900);
+  --bg-deep: var(--color-ink-950);
+  --surface: var(--color-ink-850);
+  --surface-2: var(--color-ink-800);
+  --surface-3: var(--color-ink-700);
+  --surface-inset: rgba(255, 255, 255, 0.04);
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.17);
+  --fg: #f3f0f8;
+  --fg-muted: #a49db5;
+  --fg-subtle: #7d7590;
+  --accent: var(--color-apricot-500);
+  --accent-fg: #2a1408;
+  --accent-soft: rgba(255, 138, 91, 0.14);
+  --ring: rgba(255, 138, 91, 0.55);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px -14px rgba(0, 0, 0, 0.7);
+  --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.45), 0 24px 60px -24px rgba(0, 0, 0, 0.85);
+  --grain-opacity: 0.55;
+  --board-bg: #17141f;
+  --board-slot: rgba(255, 255, 255, 0.045);
+  color-scheme: dark;
+}
+
+/* Explicit light override must win over the media-free dark default. */
+:root[data-theme='light'] {
+  --bg: var(--color-paper-100);
+  --bg-deep: var(--color-paper-200);
+  --surface: #ffffff;
+  --surface-2: var(--color-paper-50);
+  --surface-3: var(--color-paper-200);
+  --surface-inset: rgba(16, 14, 21, 0.04);
+  --line: rgba(16, 14, 21, 0.1);
+  --line-strong: rgba(16, 14, 21, 0.18);
+  --fg: #201c28;
+  --fg-muted: #5f596d;
+  --fg-subtle: #857e93;
+  --accent: var(--color-apricot-600);
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(242, 111, 61, 0.12);
+  --ring: rgba(242, 111, 61, 0.5);
+  --grain-opacity: 0.4;
+  --board-bg: #e7e0d3;
+  --board-slot: rgba(16, 14, 21, 0.07);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-deep: var(--bg-deep);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv05' 1, 'ss03' 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* Never allow page-level horizontal scrolling. */
+    overflow-x: clip;
+    min-height: 100%;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--fg);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variation-settings: 'SOFT' 40, 'WONK' 1, 'opsz' 40;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* Visible, consistent focus for keyboard users only. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+  button,
+  [role='button'] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* Paper grain — one fixed pseudo-element, cheap, never intercepts input. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: var(--grain-opacity);
+    mix-blend-mode: soft-light;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  }
+}
+
+/* ==========================================================================
+   Component utilities
+   ========================================================================== */
+
+@utility card {
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+
+@utility panel {
+  background-color: color-mix(in oklab, var(--surface) 88%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(14px) saturate(1.2);
+}
+
+@utility hairline {
+  border-bottom: 1px solid var(--line);
+}
+
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+@utility eyebrow {
+  font-size: var(--text-2xs);
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+
+/* Screen-reader-only, but focusable (skip links). */
+@utility sr-only-focusable {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  &:focus-visible {
+    position: fixed;
+    width: auto;
+    height: auto;
+    margin: 0;
+    clip-path: none;
+    inset: 12px auto auto 12px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    z-index: 100;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
+   Safe areas
+   --------------------------------------------------------------------------
+   The board is the one screen that runs edge to edge, which is exactly where a
+   phone's rounded corners, notch and home indicator start eating taps. Both
+   utilities keep their own spacing when there is no inset to respect, so they
+   are safe to use unconditionally.
+   -------------------------------------------------------------------------- */
+
+@utility pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+@utility px-safe {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* ==========================================================================
+   Scrollbars
+   ========================================================================== */
+
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+/* ==========================================================================
+   Reduced motion — honour the user's OS preference everywhere.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

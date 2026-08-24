@@ -1,0 +1,18 @@
+# Normalise line endings. Without this, a repo authored on Windows hands CRLF
+# to everyone who clones it on macOS/Linux, and every file shows as modified.
+* text=auto eol=lf
+
+# Binary — never touch these.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.gif  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.mp3  binary
+*.wav  binary
+
+# Generated — collapse in diffs and exclude from language stats.
+package-lock.json linguist-generated=true -diff
