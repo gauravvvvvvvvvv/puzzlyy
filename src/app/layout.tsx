@@ -49,6 +49,9 @@ export const metadata: Metadata = {
   },
   twitter: { card: 'summary_large_image', title: 'Puzzly', description: DESCRIPTION },
   robots: { index: true, follow: true },
+  // Google Search Console ownership proof. Not a secret, and removing it
+  // un-verifies the property, so it stays hard-coded rather than env-gated.
+  verification: { google: '8UwixM8q9XBsPJIcQggxbxIclhK1g8Mc5Ht78HoWMCo' },
   formatDetection: { telephone: false, address: false, email: false },
 };
 
