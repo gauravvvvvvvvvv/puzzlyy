@@ -1,21 +1,45 @@
 /**
- * `GET /api/cron/sweep` — delete expired rooms, challenges and uploads.
+ * `GET /api/cron/sweep` — keep Supabase active and delete expired data.
  *
- * Wired to a daily Vercel cron in `vercel.json`, which is free on every plan.
- * Vercel signs cron requests with `Authorization: Bearer $CRON_SECRET` when that
- * variable is set, and this route honours it if present — but it must not *require*
- * it, because the app has to work with zero configuration, and because the worst a
- * stranger can do by calling this is ask us to delete things that already expired.
+ * Wired to the daily Vercel cron in `vercel.json`.
  *
- * The rate limit is what stops it being used as a way to make us do work.
+ * The explicit Supabase read below is intentional: even when there is nothing
+ * to sweep, the scheduled request still creates real database activity. This
+ * keeps a low-traffic Puzzly deployment from looking completely idle to
+ * Supabase's free-tier inactivity detector.
  */
 
 import { maybeSweep, runSweep } from '@/lib/server/maintenance';
 import { clientKey, rateLimit } from '@/lib/server/ratelimit';
+import { supabaseServiceKey, supabaseUrl } from '@/lib/server/store';
 import { fail, json } from '@/lib/server/validate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+async function pingSupabase(): Promise<boolean> {
+  const url = supabaseUrl();
+  const key = supabaseServiceKey();
+  if (!url || !key) return false;
+
+  try {
+    const response = await fetch(
+      `${url.replace(/\/$/, '')}/rest/v1/rooms?select=code&limit=1`,
+      {
+        method: 'GET',
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+        },
+        cache: 'no-store',
+      },
+    );
+    return response.ok;
+  } catch (error) {
+    console.warn('[puzzly] Supabase keepalive failed', error);
+    return false;
+  }
+}
 
 export async function GET(request: Request): Promise<Response> {
   const secret = process.env.CRON_SECRET;
@@ -25,8 +49,6 @@ export async function GET(request: Request): Promise<Response> {
       : request.headers.get('x-vercel-cron') !== null;
 
   if (!authorized) {
-    // Not a rejection — an unsigned caller still gets a sweep, just a throttled
-    // one, and learns nothing about whether a secret is configured.
     const limit = rateLimit('create', clientKey(request));
     if (!limit.ok) {
       return fail('Already tidying up. Try again shortly.', 429, {
@@ -37,6 +59,16 @@ export async function GET(request: Request): Promise<Response> {
     return json({ ok: true, swept: 'scheduled' });
   }
 
+  // Do this independently of the sweep. A future cleanup refactor must not
+  // accidentally remove the tiny database request that keeps Supabase active.
+  const keepalive = await pingSupabase();
   const result = await runSweep();
-  return json({ ok: result.ok, swept: 'now', store: result.kind, images: result.images });
+
+  return json({
+    ok: result.ok && keepalive,
+    keepalive,
+    swept: 'now',
+    store: result.kind,
+    images: result.images,
+  });
 }
