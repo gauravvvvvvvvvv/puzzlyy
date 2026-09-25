@@ -117,7 +117,7 @@ export default function LandingPage() {
           <div className="animate-rise">
             <p className="eyebrow mb-5 flex items-center gap-2">
               <span className="inline-block size-1.5 rounded-full bg-[var(--color-mint-400)]" />
-              Real-time · two players · no signup
+              Real-time · up to 6 players · no signup
             </p>
 
             <h1 className="text-[clamp(2.4rem,6.2vw,3.9rem)] leading-[1.03]">
