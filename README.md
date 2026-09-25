@@ -11,7 +11,7 @@ create a room, share one link, and start solving together.
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Source_Available-orange.svg)](LICENSE)
 
 </div>
 
@@ -303,4 +303,4 @@ transport and room record don't change.
 
 ## License
 
-[Apache License 2.0](LICENSE) — see the LICENSE file for the full text.
+Puzzly is **source-available, not open source**. You may inspect the code for evaluation, learning, and security review, but you may not copy, modify, redistribute, sublicense, host, commercialize, or build derivative products from it without prior written permission. See [LICENSE](LICENSE).
