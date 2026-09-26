@@ -24,8 +24,14 @@ import { readJson, writeJson } from '@/lib/storage/local';
 
 const KEY = 'sound';
 
-/** How long a merge stays "already heard". See `snap`. */
-const DEDUPE_MS = 900;
+/** Short duplicate transport/re-render guard for an identical merge event. */
+const DEDUPE_MS = 350;
+
+/** How long an optimistic local merge waits for its authoritative echo. */
+const OPTIMISTIC_ECHO_MS = 8000;
+
+/** Multiple cascade merges from one drop should read as one physical snap. */
+const SNAP_BURST_MS = 45;
 
 /** A puzzle can only be finished once. See `chime`. */
 const CHIME_COOLDOWN_MS = 4000;
@@ -36,8 +42,10 @@ let noise: AudioBuffer | null = null;
 let enabled: boolean | null = null;
 let broken = false;
 let lastChime = 0;
+let lastAudibleSnap = 0;
 
 const recent = new Map<string, number>();
+const optimistic = new Map<string, number>();
 
 /* -------------------------------------------------------------------------- */
 /* Preference                                                                 */
@@ -71,7 +79,10 @@ export function soundEnabled(): boolean {
 export function setSoundEnabled(value: boolean): void {
   enabled = value;
   writeJson(KEY, value);
-  if (!value) recent.clear();
+  if (!value) {
+    recent.clear();
+    optimistic.clear();
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -130,6 +141,22 @@ function noiseBuffer(context: AudioContext): AudioBuffer {
   return buffer;
 }
 
+/**
+ * Prepare WebAudio during the pointer gesture that starts a drag.
+ *
+ * Doing this on pointer-down gives the browser time to resume the audio context
+ * and build the reusable noise buffer before the eventual drop needs a snap.
+ */
+export function warmSound(): void {
+  if (!soundEnabled()) return;
+  const graph = audio();
+  if (!graph) return;
+  noiseBuffer(graph.ctx);
+  if (graph.ctx.state === 'suspended') {
+    void graph.ctx.resume().catch(() => undefined);
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* The snap                                                                   */
 /* -------------------------------------------------------------------------- */
@@ -139,6 +166,11 @@ export interface SnapOptions {
   connections?: number;
   /** Somebody else's merge. Audible, but it should not compete with your own. */
   mine?: boolean;
+  /**
+   * Local drops are optimistic. Their server echo should confirm state without
+   * making the same sound again.
+   */
+  source?: 'optimistic' | 'authoritative';
 }
 
 /**
@@ -160,6 +192,22 @@ export function snap(key: string, options: SnapOptions = {}): void {
   if (!soundEnabled()) return;
 
   const now = Date.now();
+  const source = options.source ?? 'authoritative';
+
+  if (source === 'optimistic') {
+    optimistic.set(key, now);
+  } else {
+    const localAt = optimistic.get(key);
+    if (localAt !== undefined) {
+      optimistic.delete(key);
+      if (now - localAt < OPTIMISTIC_ECHO_MS) return;
+    }
+  }
+
+  for (const [k, at] of optimistic) {
+    if (now - at > OPTIMISTIC_ECHO_MS) optimistic.delete(k);
+  }
+
   const last = recent.get(key);
   if (last !== undefined && now - last < DEDUPE_MS) return;
   recent.set(key, now);
@@ -167,9 +215,14 @@ export function snap(key: string, options: SnapOptions = {}): void {
     for (const [k, at] of recent) if (now - at > DEDUPE_MS) recent.delete(k);
   }
 
+  // A single drop can cascade through multiple neighbouring groups. Those
+  // engine merges happen in the same tick but should sound like one snap.
+  if (now - lastAudibleSnap < SNAP_BURST_MS) return;
+
   const graph = audio();
   if (!graph) return;
 
+  lastAudibleSnap = now;
   const { ctx: context, master: out } = graph;
   const at = context.currentTime;
   const connections = Math.max(1, options.connections ?? 1);
