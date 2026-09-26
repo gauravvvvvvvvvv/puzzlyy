@@ -8,11 +8,13 @@
  *     ImageProvider
  *       ├── OriginalsProvider  — always available, zero keys, zero storage
  *       ├── UploadProvider     — blob storage, resolved by id
- *       └── StockProvider      — optional keys, falls back to Originals
+ *       └── StockProvider      — optional keys, kept separate from Originals
  *
  * Originals are the default deliberately: the product has to be fully playable
  * with no configuration at all, so "no keys" must mean "smaller gallery", never
- * "empty gallery".
+ * "empty gallery". The Stock tab itself stays honest, though: if no provider is
+ * configured (or an upstream provider fails), it returns no stock items instead
+ * of duplicating Puzzly Originals.
  *
  * **Server-only.** This module reads storage and env; client code should call
  * `/api/images` and import categories from `./categories`.
@@ -45,9 +47,9 @@ export interface ImagePage {
   items: ImageAsset[];
   page: number;
   hasMore: boolean;
-  /** Which backend actually answered. `originals` when stock fell back. */
+  /** Which backend actually answered. */
   provider: string;
-  /** True when a stock request was served from Originals instead. */
+  /** Kept for API compatibility. Stock no longer falls back to Originals. */
   fallback: boolean;
 }
 
@@ -161,15 +163,31 @@ class StockProvider implements ImageProvider {
     const text = (query.query ?? '').trim();
     const term = text || queryFor(query.category, 'landscape nature scenery');
 
-    const result = this.available ? await searchStock(term, page, perPage) : null;
-    if (result && result.items.length) {
-      return { items: result.items, page, hasMore: result.hasMore, provider: result.provider, fallback: false };
+    // Keep Stock and Originals as genuinely separate collections. Previously a
+    // missing key, upstream failure, or zero-result search replayed Originals in
+    // the Stock tab, which made the gallery look duplicated.
+    if (!this.available) {
+      return { items: [], page, hasMore: false, provider: 'unavailable', fallback: false };
     }
 
-    // No keys, an upstream failure, or an empty result set — hand back
-    // Originals so the picker is never a dead end.
-    const originals = await ORIGINALS_PROVIDER.search(query);
-    return { ...originals, provider: 'originals', fallback: true };
+    const result = await searchStock(term, page, perPage);
+    if (result) {
+      return {
+        items: result.items,
+        page,
+        hasMore: result.hasMore,
+        provider: result.provider,
+        fallback: false,
+      };
+    }
+
+    return {
+      items: [],
+      page,
+      hasMore: false,
+      provider: stockProvider() ?? 'unavailable',
+      fallback: false,
+    };
   }
 
   /**
