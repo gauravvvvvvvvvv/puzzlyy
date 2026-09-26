@@ -3,8 +3,8 @@
  *
  * Both providers are keyed, and the product requirement is that the app works
  * with **zero API keys**. So this module never throws and never blocks: if no
- * key is configured, or the upstream call fails, the caller gets `null` and
- * falls back to Puzzly Originals (see `./index.ts`).
+ * key is configured, or the upstream call fails, the caller gets `null`.
+ * The Stock gallery then stays empty instead of replaying Puzzly Originals.
  *
  * Keys are read from `process.env` here and nowhere else. Only the normalised
  * `ImageAsset` crosses back to the client, and every URL it contains points at
@@ -180,8 +180,8 @@ async function searchPexels(key: string, query: string, page: number, perPage: n
 
 /**
  * Search whichever provider is configured. Returns `null` — not an error — when
- * nothing is configured or the upstream call fails, so the caller can quietly
- * fall back to Originals.
+ * nothing is configured or the upstream call fails. The caller keeps Stock
+ * separate from Originals and can show an empty/unavailable state.
  */
 export async function searchStock(query: string, page = 1, perPage = 24): Promise<StockPage | null> {
   const text = query.trim();

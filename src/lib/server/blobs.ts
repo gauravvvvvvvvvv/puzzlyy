@@ -6,10 +6,11 @@
  * `/api/blob/[id]` — same origin, which keeps the puzzle canvas untainted and
  * means no storage URL or key is ever exposed to the client.
  *
- * There are two implementations and they are **not** interchangeable:
+ * There are three implementations:
  *
- *  - `SupabaseBlobStore` is the production store. Durable, shared by every
- *    instance, survives deploys.
+ *  - `R2BlobStore` is preferred in production. Durable, shared by every
+ *    instance, cheap to keep, and has no public bucket URL.
+ *  - `SupabaseBlobStore` remains a durable fallback for older deployments.
  *  - `FsBlobStore` is a **development** convenience so the app runs with zero
  *    configuration. On a serverless host it writes to `/tmp`, which is per
  *    instance and wiped on redeploy — a blob written by one request is often
@@ -20,6 +21,7 @@
  */
 
 import { promises as fs } from 'node:fs';
+import { createHash, createHmac } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -76,9 +78,9 @@ class FsBlobStore implements BlobStore {
     if (onVercel) {
       console.error(
         '[puzzly] No durable blob storage configured. Uploaded images are being ' +
-          'written to this instance’s /tmp and WILL disappear. Set ' +
-          'NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY and create the ' +
-          'storage bucket. See README.md > Deployment modes.',
+          'written to this instance’s /tmp and WILL disappear. Configure R2 ' +
+          '(R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET) ' +
+          'or Supabase Storage. See README.md > Deployment modes.',
       );
     }
   }
@@ -135,6 +137,183 @@ class FsBlobStore implements BlobStore {
       const oldest = this.cache.keys().next().value;
       if (oldest !== undefined) this.cache.delete(oldest);
     }
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Cloudflare R2                                                              */
+/* -------------------------------------------------------------------------- */
+
+interface R2Config {
+  accountId: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  bucket: string;
+}
+
+function r2Config(): R2Config | null {
+  const values = {
+    accountId: process.env.R2_ACCOUNT_ID?.trim() ?? '',
+    accessKeyId: process.env.R2_ACCESS_KEY_ID?.trim() ?? '',
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY?.trim() ?? '',
+    bucket: process.env.R2_BUCKET?.trim() ?? '',
+  };
+  const configured = Object.values(values).filter(Boolean).length;
+  if (configured === 0) return null;
+  if (configured !== 4) {
+    const missing: string[] = [];
+    if (!values.accountId) missing.push('R2_ACCOUNT_ID');
+    if (!values.accessKeyId) missing.push('R2_ACCESS_KEY_ID');
+    if (!values.secretAccessKey) missing.push('R2_SECRET_ACCESS_KEY');
+    if (!values.bucket) missing.push('R2_BUCKET');
+    throw new Error(`Incomplete R2 configuration. Missing: ${missing.join(', ')}`);
+  }
+  return values;
+}
+
+function sha256Hex(data: string | Uint8Array): string {
+  return createHash('sha256').update(data).digest('hex');
+}
+
+function hmac(key: string | Buffer, value: string): Buffer {
+  return createHmac('sha256', key).update(value).digest();
+}
+
+function awsDate(now = new Date()): { amzDate: string; day: string } {
+  const iso = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  return { amzDate: iso, day: iso.slice(0, 8) };
+}
+
+/**
+ * Sign one path-style request for R2's S3-compatible endpoint.
+ *
+ * We deliberately keep the signed-header set tiny. Content-Type can still be
+ * sent on PUT, but does not need to participate in the signature.
+ */
+function signR2Request(
+  config: R2Config,
+  method: 'GET' | 'PUT' | 'DELETE',
+  objectName: string,
+  payload: Uint8Array | '',
+): { url: string; headers: Record<string, string> } {
+  const host = `${config.accountId}.r2.cloudflarestorage.com`;
+  const path = `/${encodeURIComponent(config.bucket)}/${encodeURIComponent(objectName)}`;
+  const { amzDate, day } = awsDate();
+  const payloadHash = sha256Hex(payload);
+
+  const canonicalHeaders =
+    `host:${host}\n` +
+    `x-amz-content-sha256:${payloadHash}\n` +
+    `x-amz-date:${amzDate}\n`;
+  const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+  const canonicalRequest = [
+    method,
+    path,
+    '',
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join('\n');
+
+  const scope = `${day}/auto/s3/aws4_request`;
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    scope,
+    sha256Hex(canonicalRequest),
+  ].join('\n');
+
+  const kDate = hmac(`AWS4${config.secretAccessKey}`, day);
+  const kRegion = hmac(kDate, 'auto');
+  const kService = hmac(kRegion, 's3');
+  const kSigning = hmac(kService, 'aws4_request');
+  const signature = createHmac('sha256', kSigning).update(stringToSign).digest('hex');
+
+  return {
+    url: `https://${host}${path}`,
+    headers: {
+      Authorization:
+        `AWS4-HMAC-SHA256 Credential=${config.accessKeyId}/${scope}, ` +
+        `SignedHeaders=${signedHeaders}, Signature=${signature}`,
+      'x-amz-content-sha256': payloadHash,
+      'x-amz-date': amzDate,
+    },
+  };
+}
+
+class R2BlobStore implements BlobStore {
+  readonly kind = 'cloudflare-r2';
+  readonly durable = true;
+
+  constructor(private config: R2Config) {}
+
+  async put(id: string, data: Uint8Array, contentType: string): Promise<void> {
+    const name = `${id}.${extensionFor(contentType)}`;
+    const signed = signR2Request(this.config, 'PUT', name, data);
+    const res = await fetch(signed.url, {
+      method: 'PUT',
+      headers: { ...signed.headers, 'Content-Type': contentType },
+      body: new Blob([data as BlobPart], { type: contentType }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      console.error('[puzzly] R2 upload failed', res.status, detail.slice(0, 300));
+      throw new Error(`R2 rejected the upload (${res.status}).`);
+    }
+  }
+
+  async get(id: string): Promise<StoredBlob | null> {
+    for (const [contentType, ext] of Object.entries(CONTENT_TYPES)) {
+      const signed = signR2Request(this.config, 'GET', `${id}.${ext}`, '');
+      try {
+        const res = await fetch(signed.url, {
+          headers: signed.headers,
+          cache: 'no-store',
+        });
+        if (res.status === 404) continue;
+        if (!res.ok) {
+          const detail = await res.text().catch(() => '');
+          console.error('[puzzly] R2 read failed', res.status, detail.slice(0, 300));
+          continue;
+        }
+        return {
+          data: new Uint8Array(await res.arrayBuffer()),
+          contentType: res.headers.get('content-type') ?? contentType,
+        };
+      } catch {
+        /* try the next extension */
+      }
+    }
+    return null;
+  }
+
+  async delete(id: string): Promise<void> {
+    for (const ext of Object.values(CONTENT_TYPES)) {
+      const signed = signR2Request(this.config, 'DELETE', `${id}.${ext}`, '');
+      await fetch(signed.url, { method: 'DELETE', headers: signed.headers }).catch(() => undefined);
+    }
+  }
+}
+
+class MigratingBlobStore implements BlobStore {
+  readonly kind = 'cloudflare-r2 (supabase read fallback)';
+  readonly durable = true;
+
+  constructor(
+    private primary: BlobStore,
+    private legacy: BlobStore,
+  ) {}
+
+  put(id: string, data: Uint8Array, contentType: string): Promise<void> {
+    return this.primary.put(id, data, contentType);
+  }
+
+  async get(id: string): Promise<StoredBlob | null> {
+    return (await this.primary.get(id)) ?? this.legacy.get(id);
+  }
+
+  async delete(id: string): Promise<void> {
+    await Promise.allSettled([this.primary.delete(id), this.legacy.delete(id)]);
   }
 }
 
@@ -218,14 +397,24 @@ declare global {
 
 export function getBlobStore(): BlobStore {
   if (globalThis.__puzzlyBlobs) return globalThis.__puzzlyBlobs;
-  // Falls back to the public URL: SUPABASE_URL is an optional override, and
-  // reading only it would silently downgrade production to local-disk blobs,
-  // which do not survive a deploy on Vercel.
+
   const url = supabaseUrl();
   const key = supabaseServiceKey();
   const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'puzzly-images';
-  const store: BlobStore =
-    url && key ? new SupabaseBlobStore(url, key, bucket) : new FsBlobStore();
+  const legacy = url && key ? new SupabaseBlobStore(url, key, bucket) : null;
+
+  // Prefer R2 for every new write. During migration, reads fall back to
+  // Supabase Storage so existing puzzle links keep working until their normal
+  // expiry sweep removes those old objects.
+  const r2 = r2Config();
+  if (r2) {
+    const primary = new R2BlobStore(r2);
+    globalThis.__puzzlyBlobs = legacy ? new MigratingBlobStore(primary, legacy) : primary;
+    return globalThis.__puzzlyBlobs;
+  }
+
+  // No R2 configured: preserve the old Supabase Storage behaviour.
+  const store: BlobStore = legacy ?? new FsBlobStore();
   globalThis.__puzzlyBlobs = store;
   return store;
 }
