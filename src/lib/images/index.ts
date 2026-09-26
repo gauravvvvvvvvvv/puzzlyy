@@ -152,7 +152,7 @@ class UploadProvider implements ImageProvider {
 
 class StockProvider implements ImageProvider {
   readonly source: ImageSource = 'stock';
-  readonly label = 'Stock photos';
+  readonly label = 'Photo library';
 
   get available(): boolean {
     return hasStockProvider();
