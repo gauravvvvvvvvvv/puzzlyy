@@ -53,7 +53,8 @@ export type IconName =
   | 'flag'
   | 'wifi'
   | 'close'
-  | 'grid';
+  | 'grid'
+  | 'heart';
 
 /** Paths are drawn on a 24×24 grid with a 1.7 stroke, so weights match. */
 const PATHS: Record<IconName, string> = {
@@ -112,6 +113,7 @@ const PATHS: Record<IconName, string> = {
   wifi: 'M4.5 9.5a11 11 0 0 1 15 0M7.5 13a7 7 0 0 1 9 0M10.5 16.4a3 3 0 0 1 3 0M12 19.4h.01',
   close: 'M6.5 6.5l11 11M17.5 6.5l-11 11',
   grid: 'M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z',
+  heart: 'M12 20s-7.5-4.7-7.5-10.2A4.3 4.3 0 0 1 12 6.9a4.3 4.3 0 0 1 7.5 2.9C19.5 15.3 12 20 12 20Z',
 };
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name' | 'children'> {
