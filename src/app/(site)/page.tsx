@@ -146,6 +146,15 @@ export default function LandingPage() {
               — same board, no waiting.
             </p>
 
+            <a
+              href="https://github.com/sponsors/gauravvvvvvvvvv"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-5 inline-flex items-center rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-2xs font-semibold text-[var(--fg-muted)] transition-colors hover:border-[var(--line-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
+            >
+              Sponsor Puzzly on GitHub
+            </a>
+
             <div className="mt-8 max-w-md">
               <ResumeCard />
             </div>
