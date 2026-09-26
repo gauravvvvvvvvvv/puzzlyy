@@ -353,6 +353,7 @@ export function useRoomSession(code: string): RoomSession {
           snap(mergeKey(event.into, event.from), {
             connections: event.from.length,
             mine: event.by === mine,
+            source: 'authoritative',
           });
           if (current?.isComplete()) chime();
           markDirty();
