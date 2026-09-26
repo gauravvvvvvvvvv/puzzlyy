@@ -30,7 +30,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PuzzleEngine } from '@/lib/puzzle/engine';
 import { PuzzleRenderer } from '@/lib/puzzle/renderer';
 import type { Camera, HintState, RemoteLock, RendererTheme } from '@/lib/puzzle/renderer';
-import { chime, mergeKey, snap } from '@/lib/puzzle/sound';
+import { chime, mergeKey, snap, warmSound } from '@/lib/puzzle/sound';
 import type { PieceAtlas } from '@/lib/puzzle/sprites';
 import { playerColor } from '@/lib/multiplayer/identity';
 import { CURSOR_TTL_MS } from '@/hooks/useRoomSession';
@@ -395,6 +395,7 @@ export function PuzzleBoard({
 
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLCanvasElement>) => {
+      warmSound();
       const renderer = rendererRef.current;
       if (!renderer) return;
       const screen = screenPoint(event);
@@ -590,6 +591,7 @@ export function PuzzleBoard({
             snap(mergeKey(merge.into, merge.from), {
               connections: merge.connections,
               mine: true,
+              source: 'optimistic',
             });
           }
           if (result.completed) {
