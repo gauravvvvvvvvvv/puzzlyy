@@ -3,10 +3,10 @@
 /**
  * Choose the picture (spec §11).
  *
- * Four sources behind one grid: Puzzly Originals, stock photos, an upload, and
- * anything already in this device's library. Originals lead because they need no
- * keys and no network round trip to a third party — the picker must never be an
- * empty screen, whatever the deployment has configured.
+ * Four sources behind one grid: a searchable photo library, Puzzly Originals,
+ * an upload, and anything already in this device's library. The photo library
+ * leads when a provider is configured; Originals remain a built-in fallback
+ * collection with no external dependency.
  *
  * The server-only `@/lib/images` barrel is deliberately not imported here; the
  * browser talks to `/api/images` and takes its category list from the
@@ -34,8 +34,8 @@ import type { ImageAsset, LibraryEntry } from '@/types/models';
 type Tab = 'original' | 'stock' | 'upload' | 'library';
 
 const TABS: { id: Tab; label: string; icon: 'sparkle' | 'search' | 'upload' | 'grid' }[] = [
+  { id: 'stock', label: 'Photo library', icon: 'search' },
   { id: 'original', label: 'Originals', icon: 'sparkle' },
-  { id: 'stock', label: 'Stock photos', icon: 'search' },
   { id: 'upload', label: 'Upload', icon: 'upload' },
   { id: 'library', label: 'My puzzles', icon: 'grid' },
 ];
@@ -49,7 +49,7 @@ export interface ImagePickerProps {
 }
 
 export function ImagePicker({ value, onSelect, className = '' }: ImagePickerProps) {
-  const [tab, setTab] = useState<Tab>('original');
+  const [tab, setTab] = useState<Tab>('stock');
 
   return (
     <div className={className}>
@@ -90,7 +90,7 @@ export function ImagePicker({ value, onSelect, className = '' }: ImagePickerProp
 }
 
 /* -------------------------------------------------------------------------- */
-/* Gallery (Originals + stock)                                                */
+/* Gallery (Photo library + Originals)                                        */
 /* -------------------------------------------------------------------------- */
 
 function GalleryPane({
@@ -169,21 +169,23 @@ function GalleryPane({
         ) : null}
       </div>
 
-      <div className="no-scrollbar -mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
-        <CategoryChip
-          label="All"
-          active={category === null}
-          onClick={() => changeFilter(() => setCategory(null))}
-        />
-        {IMAGE_CATEGORIES.map((entry) => (
+      {source === 'stock' ? (
+        <div className="no-scrollbar -mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
           <CategoryChip
-            key={entry.id}
-            label={entry.label}
-            active={category === entry.id}
-            onClick={() => changeFilter(() => setCategory(entry.id))}
+            label="All"
+            active={category === null}
+            onClick={() => changeFilter(() => setCategory(null))}
           />
-        ))}
-      </div>
+          {IMAGE_CATEGORIES.map((entry) => (
+            <CategoryChip
+              key={entry.id}
+              label={entry.label}
+              active={category === entry.id}
+              onClick={() => changeFilter(() => setCategory(entry.id))}
+            />
+          ))}
+        </div>
+      ) : null}
 
       {error ? (
         <Notice tone="bad">{error}</Notice>
