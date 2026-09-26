@@ -231,9 +231,9 @@ function GalleryPane({
               type="button"
               aria-label="Previous picture categories"
               onClick={() => scrollCategories(-1)}
-              className="absolute top-1/2 left-0 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--line-strong)] bg-[var(--surface)] text-[var(--fg)] shadow-[var(--shadow-soft)] transition-transform hover:scale-105"
+              className="absolute inset-y-0 left-0 z-10 flex w-8 items-center justify-center text-[var(--fg-subtle)] transition-colors hover:text-[var(--fg-muted)]"
             >
-              <Icon name="arrow-left" size={16} />
+              <Icon name="chevron-left" size={19} />
             </button>
           ) : null}
 
@@ -242,9 +242,9 @@ function GalleryPane({
               type="button"
               aria-label="More picture categories"
               onClick={() => scrollCategories(1)}
-              className="absolute top-1/2 right-0 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--line-strong)] bg-[var(--surface)] text-[var(--fg)] shadow-[var(--shadow-soft)] transition-transform hover:scale-105"
+              className="absolute inset-y-0 right-0 z-10 flex w-8 items-center justify-center text-[var(--fg-subtle)] transition-colors hover:text-[var(--fg-muted)]"
             >
-              <Icon name="arrow-right" size={16} />
+              <Icon name="chevron-right" size={19} />
             </button>
           ) : null}
         </div>
