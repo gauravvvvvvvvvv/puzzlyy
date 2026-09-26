@@ -278,7 +278,7 @@ export function fetchChallenge(id: string): Promise<ChallengeResponse> {
 export interface HealthResponse {
   ok: boolean;
   ready: boolean;
-  storage: { rooms: string; images: string };
+  storage: { rooms: string; images: string; imageProvider?: string };
   realtime: RealtimeMode;
   images: { originals: number; stock: string | null };
   warnings: string[];
