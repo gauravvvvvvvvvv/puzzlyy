@@ -206,47 +206,57 @@ function GalleryPane({
       </div>
 
       {source === 'stock' ? (
-        <div className="relative mt-3">
+        <div className="mt-3 flex items-center gap-2">
           <div
             ref={categoryScrollRef}
-            className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1"
+            className="no-scrollbar -mx-1 min-w-0 flex-1 gap-1.5 overflow-x-auto px-1 pb-1"
           >
-            <CategoryChip
-              label="All"
-              active={category === null}
-              onClick={() => changeFilter(() => setCategory(null))}
-            />
-            {IMAGE_CATEGORIES.map((entry) => (
+            <div className="flex gap-1.5">
               <CategoryChip
-                key={entry.id}
-                label={entry.label}
-                active={category === entry.id}
-                onClick={() => changeFilter(() => setCategory(entry.id))}
+                label="All"
+                active={category === null}
+                onClick={() => changeFilter(() => setCategory(null))}
               />
-            ))}
+              {IMAGE_CATEGORIES.map((entry) => (
+                <CategoryChip
+                  key={entry.id}
+                  label={entry.label}
+                  active={category === entry.id}
+                  onClick={() => changeFilter(() => setCategory(entry.id))}
+                />
+              ))}
+            </div>
           </div>
 
-          {canScrollCategoriesLeft ? (
+          <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
               aria-label="Previous picture categories"
               onClick={() => scrollCategories(-1)}
-              className="absolute inset-y-0 left-0 z-10 flex w-8 items-center justify-center text-[var(--fg-subtle)] transition-colors hover:text-[var(--fg-muted)]"
+              disabled={!canScrollCategoriesLeft}
+              className={`flex size-9 items-center justify-center rounded-md transition-[background-color,color,opacity,box-shadow] ${
+                canScrollCategoriesLeft
+                  ? 'bg-[var(--surface-2)] text-[var(--fg)] shadow-[inset_0_0_0_1px_var(--line-strong)] hover:bg-[var(--surface-inset)]'
+                  : 'bg-[var(--surface-inset)] text-[var(--fg-subtle)] opacity-35'
+              }`}
             >
               <Icon name="chevron-left" size={19} />
             </button>
-          ) : null}
 
-          {canScrollCategoriesRight ? (
             <button
               type="button"
               aria-label="More picture categories"
               onClick={() => scrollCategories(1)}
-              className="absolute inset-y-0 right-0 z-10 flex w-8 items-center justify-center text-[var(--fg-subtle)] transition-colors hover:text-[var(--fg-muted)]"
+              disabled={!canScrollCategoriesRight}
+              className={`flex size-9 items-center justify-center rounded-md transition-[background-color,color,opacity,box-shadow] ${
+                canScrollCategoriesRight
+                  ? 'bg-[var(--surface-2)] text-[var(--fg)] shadow-[inset_0_0_0_1px_var(--line-strong)] hover:bg-[var(--surface-inset)]'
+                  : 'bg-[var(--surface-inset)] text-[var(--fg-subtle)] opacity-35'
+              }`}
             >
               <Icon name="chevron-right" size={19} />
             </button>
-          ) : null}
+          </div>
         </div>
       ) : null}
 
