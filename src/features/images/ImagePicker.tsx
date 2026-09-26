@@ -111,6 +111,42 @@ function GalleryPane({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fellBack, setFellBack] = useState(false);
+  const categoryScrollRef = useRef<HTMLDivElement | null>(null);
+  const [canScrollCategoriesLeft, setCanScrollCategoriesLeft] = useState(false);
+  const [canScrollCategoriesRight, setCanScrollCategoriesRight] = useState(false);
+
+  const updateCategoryScrollButtons = useCallback(() => {
+    const element = categoryScrollRef.current;
+    if (!element) return;
+    const maxScrollLeft = element.scrollWidth - element.clientWidth;
+    setCanScrollCategoriesLeft(element.scrollLeft > 4);
+    setCanScrollCategoriesRight(element.scrollLeft < maxScrollLeft - 4);
+  }, []);
+
+  useEffect(() => {
+    if (source !== 'stock') return;
+    const element = categoryScrollRef.current;
+    if (!element) return;
+
+    updateCategoryScrollButtons();
+    element.addEventListener('scroll', updateCategoryScrollButtons, { passive: true });
+    const observer = new ResizeObserver(updateCategoryScrollButtons);
+    observer.observe(element);
+
+    return () => {
+      element.removeEventListener('scroll', updateCategoryScrollButtons);
+      observer.disconnect();
+    };
+  }, [source, updateCategoryScrollButtons]);
+
+  const scrollCategories = (direction: -1 | 1) => {
+    const element = categoryScrollRef.current;
+    if (!element) return;
+    element.scrollBy({
+      left: direction * Math.max(240, element.clientWidth * 0.65),
+      behavior: 'smooth',
+    });
+  };
 
   // Typing should not fire a request per keystroke.
   useEffect(() => {
@@ -170,20 +206,47 @@ function GalleryPane({
       </div>
 
       {source === 'stock' ? (
-        <div className="no-scrollbar -mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
-          <CategoryChip
-            label="All"
-            active={category === null}
-            onClick={() => changeFilter(() => setCategory(null))}
-          />
-          {IMAGE_CATEGORIES.map((entry) => (
+        <div className="relative mt-3">
+          <div
+            ref={categoryScrollRef}
+            className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1"
+          >
             <CategoryChip
-              key={entry.id}
-              label={entry.label}
-              active={category === entry.id}
-              onClick={() => changeFilter(() => setCategory(entry.id))}
+              label="All"
+              active={category === null}
+              onClick={() => changeFilter(() => setCategory(null))}
             />
-          ))}
+            {IMAGE_CATEGORIES.map((entry) => (
+              <CategoryChip
+                key={entry.id}
+                label={entry.label}
+                active={category === entry.id}
+                onClick={() => changeFilter(() => setCategory(entry.id))}
+              />
+            ))}
+          </div>
+
+          {canScrollCategoriesLeft ? (
+            <button
+              type="button"
+              aria-label="Previous picture categories"
+              onClick={() => scrollCategories(-1)}
+              className="absolute top-1/2 left-0 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--line-strong)] bg-[var(--surface)] text-[var(--fg)] shadow-[var(--shadow-soft)] transition-transform hover:scale-105"
+            >
+              <Icon name="arrow-left" size={16} />
+            </button>
+          ) : null}
+
+          {canScrollCategoriesRight ? (
+            <button
+              type="button"
+              aria-label="More picture categories"
+              onClick={() => scrollCategories(1)}
+              className="absolute top-1/2 right-0 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--line-strong)] bg-[var(--surface)] text-[var(--fg)] shadow-[var(--shadow-soft)] transition-transform hover:scale-105"
+            >
+              <Icon name="arrow-right" size={16} />
+            </button>
+          ) : null}
         </div>
       ) : null}
 
