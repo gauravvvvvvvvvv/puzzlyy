@@ -12,7 +12,7 @@
  */
 
 import { imageCapabilities } from '@/lib/images';
-import { hasDurableBlobStore } from '@/lib/server/blobs';
+import { getBlobStore } from '@/lib/server/blobs';
 import { realtimeMode } from '@/lib/server/broadcast';
 import { hasDurableStore } from '@/lib/server/store';
 import { json } from '@/lib/server/validate';
@@ -22,7 +22,8 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(): Promise<Response> {
   const rooms = hasDurableStore();
-  const blobs = hasDurableBlobStore();
+  const blobStore = getBlobStore();
+  const blobs = blobStore.durable;
   const realtime = realtimeMode();
   const images = imageCapabilities();
 
@@ -36,7 +37,7 @@ export async function GET(): Promise<Response> {
   if (!blobs) {
     warnings.push(
       'Uploaded images are stored on the local filesystem and will disappear. ' +
-        'Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, and create the storage bucket.',
+        'Configure Cloudflare R2, or configure Supabase Storage as a fallback.',
     );
   }
   if (realtime === 'sse') {
@@ -51,7 +52,11 @@ export async function GET(): Promise<Response> {
   return json({
     ok: true,
     ready: rooms && blobs && realtime === 'supabase',
-    storage: { rooms: rooms ? 'durable' : 'memory', images: blobs ? 'durable' : 'filesystem' },
+    storage: {
+      rooms: rooms ? 'durable' : 'memory',
+      images: blobs ? 'durable' : 'filesystem',
+      imageProvider: blobStore.kind,
+    },
     realtime,
     images,
     warnings,
