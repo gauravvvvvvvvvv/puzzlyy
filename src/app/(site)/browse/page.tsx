@@ -3,7 +3,7 @@ import { BrowseGallery } from '@/features/images/BrowseGallery';
 export const metadata = {
   title: 'Browse pictures',
   description:
-    'Puzzly Originals, stock photos and your own uploads — pick one and turn it into a puzzle.',
+    'Browse a searchable photo library, Puzzly Originals, or your own uploads and turn one into a puzzle.',
 };
 
 export default function BrowsePage() {
@@ -13,8 +13,8 @@ export default function BrowsePage() {
         <p className="eyebrow mb-3">Pictures</p>
         <h1 className="text-3xl sm:text-4xl">Find something worth a couple of hours</h1>
         <p className="mt-3 max-w-xl text-[var(--fg-muted)]">
-          Puzzly Originals are drawn by us and always available. Add your own photo if you would
-          rather solve something that means something.
+          Browse fresh photos from our library, use a Puzzly Original, or add your own photo if
+          you would rather solve something that means something.
         </p>
       </header>
 
