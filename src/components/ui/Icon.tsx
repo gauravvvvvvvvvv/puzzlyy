@@ -33,6 +33,8 @@ export type IconName =
   | 'again'
   | 'arrow-right'
   | 'arrow-left'
+  | 'chevron-right'
+  | 'chevron-left'
   | 'zoom-in'
   | 'zoom-out'
   | 'fit'
@@ -85,6 +87,8 @@ const PATHS: Record<IconName, string> = {
     'M19 12a7 7 0 1 1-2.4-5.3M19.5 4.5V9H15',
   'arrow-right': 'M4.5 12h14M13 6.5l5.5 5.5-5.5 5.5',
   'arrow-left': 'M19.5 12h-14M11 6.5 5.5 12l5.5 5.5',
+  'chevron-right': 'M9 6.5 14.5 12 9 17.5',
+  'chevron-left': 'M15 6.5 9.5 12 15 17.5',
   'zoom-in': 'M10.5 4.5a6 6 0 1 0 0 12 6 6 0 0 0 0-12ZM15 15l4.5 4.5M10.5 8v5M8 10.5h5',
   'zoom-out': 'M10.5 4.5a6 6 0 1 0 0 12 6 6 0 0 0 0-12ZM15 15l4.5 4.5M8 10.5h5',
   fit: 'M5 9V6a1 1 0 0 1 1-1h3M19 9V6a1 1 0 0 0-1-1h-3M5 15v3a1 1 0 0 0 1 1h3M19 15v3a1 1 0 0 1-1 1h-3',
