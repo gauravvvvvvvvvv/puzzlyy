@@ -150,8 +150,9 @@ export default function LandingPage() {
               href="https://github.com/sponsors/gauravvvvvvvvvv"
               target="_blank"
               rel="noreferrer"
-              className="mt-5 inline-flex items-center rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 text-2xs font-semibold text-[var(--fg-muted)] transition-colors hover:border-[var(--line-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--fg)]"
+              className="mt-6 inline-flex items-center gap-2 rounded-full border border-[var(--accent)] bg-[var(--accent-soft)] px-4 py-2.5 text-sm font-semibold text-[var(--fg)] shadow-[var(--shadow-soft)] transition-[transform,background-color,border-color] hover:-translate-y-0.5 hover:border-[var(--accent)] hover:bg-[color-mix(in_oklab,var(--accent-soft)_82%,var(--surface))]"
             >
+              <Icon name="heart" size={17} className="text-[var(--accent)]" />
               Sponsor Puzzly on GitHub
             </a>
 
