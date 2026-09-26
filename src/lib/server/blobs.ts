@@ -295,6 +295,28 @@ class R2BlobStore implements BlobStore {
   }
 }
 
+class MigratingBlobStore implements BlobStore {
+  readonly kind = 'cloudflare-r2 (supabase read fallback)';
+  readonly durable = true;
+
+  constructor(
+    private primary: BlobStore,
+    private legacy: BlobStore,
+  ) {}
+
+  put(id: string, data: Uint8Array, contentType: string): Promise<void> {
+    return this.primary.put(id, data, contentType);
+  }
+
+  async get(id: string): Promise<StoredBlob | null> {
+    return (await this.primary.get(id)) ?? this.legacy.get(id);
+  }
+
+  async delete(id: string): Promise<void> {
+    await Promise.allSettled([this.primary.delete(id), this.legacy.delete(id)]);
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Supabase Storage                                                           */
 /* -------------------------------------------------------------------------- */
@@ -376,22 +398,23 @@ declare global {
 export function getBlobStore(): BlobStore {
   if (globalThis.__puzzlyBlobs) return globalThis.__puzzlyBlobs;
 
-  // Prefer R2 when it is configured. Supabase Storage remains a migration-safe
-  // fallback, so existing deployments do not break just because this code ships.
-  const r2 = r2Config();
-  if (r2) {
-    globalThis.__puzzlyBlobs = new R2BlobStore(r2);
-    return globalThis.__puzzlyBlobs;
-  }
-
-  // Falls back to the public URL: SUPABASE_URL is an optional override, and
-  // reading only it would silently downgrade production to local-disk blobs,
-  // which do not survive a deploy on Vercel.
   const url = supabaseUrl();
   const key = supabaseServiceKey();
   const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'puzzly-images';
-  const store: BlobStore =
-    url && key ? new SupabaseBlobStore(url, key, bucket) : new FsBlobStore();
+  const legacy = url && key ? new SupabaseBlobStore(url, key, bucket) : null;
+
+  // Prefer R2 for every new write. During migration, reads fall back to
+  // Supabase Storage so existing puzzle links keep working until their normal
+  // expiry sweep removes those old objects.
+  const r2 = r2Config();
+  if (r2) {
+    const primary = new R2BlobStore(r2);
+    globalThis.__puzzlyBlobs = legacy ? new MigratingBlobStore(primary, legacy) : primary;
+    return globalThis.__puzzlyBlobs;
+  }
+
+  // No R2 configured: preserve the old Supabase Storage behaviour.
+  const store: BlobStore = legacy ?? new FsBlobStore();
   globalThis.__puzzlyBlobs = store;
   return store;
 }
