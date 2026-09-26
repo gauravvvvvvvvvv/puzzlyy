@@ -161,16 +161,11 @@ function r2Config(): R2Config | null {
   const configured = Object.values(values).filter(Boolean).length;
   if (configured === 0) return null;
   if (configured !== 4) {
-    const missing = Object.entries(values)
-      .filter(([, value]) => !value)
-      .map(([key]) =>
-        ({
-          accountId: 'R2_ACCOUNT_ID',
-          accessKeyId: 'R2_ACCESS_KEY_ID',
-          secretAccessKey: 'R2_SECRET_ACCESS_KEY',
-          bucket: 'R2_BUCKET',
-        })[key],
-      );
+    const missing: string[] = [];
+    if (!values.accountId) missing.push('R2_ACCOUNT_ID');
+    if (!values.accessKeyId) missing.push('R2_ACCESS_KEY_ID');
+    if (!values.secretAccessKey) missing.push('R2_SECRET_ACCESS_KEY');
+    if (!values.bucket) missing.push('R2_BUCKET');
     throw new Error(`Incomplete R2 configuration. Missing: ${missing.join(', ')}`);
   }
   return values;
