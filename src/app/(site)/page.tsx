@@ -146,15 +146,6 @@ export default function LandingPage() {
               — same board, no waiting.
             </p>
 
-            <a
-              href="https://github.com/sponsors/gauravvvvvvvvvv"
-              target="_blank"
-              rel="noreferrer"
-              className="mt-6 inline-flex items-center gap-2 rounded-full border border-[var(--accent)] bg-[var(--accent-soft)] px-4 py-2.5 text-sm font-semibold text-[var(--fg)] shadow-[var(--shadow-soft)] transition-[transform,background-color,border-color] hover:-translate-y-0.5 hover:border-[var(--accent)] hover:bg-[color-mix(in_oklab,var(--accent-soft)_82%,var(--surface))]"
-            >
-              <Icon name="heart" size={17} className="text-[var(--accent)]" />
-              Sponsor Puzzly on GitHub
-            </a>
 
             <div className="mt-8 max-w-md">
               <ResumeCard />
