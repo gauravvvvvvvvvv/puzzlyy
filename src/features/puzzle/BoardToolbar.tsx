@@ -40,6 +40,8 @@ export interface BoardToolbarProps {
   onGhost: (value: boolean) => void;
   grid: boolean;
   onGrid: (value: boolean) => void;
+  edgeFocus: boolean;
+  onEdgeFocus: (value: boolean) => void;
   sound: boolean;
   onSound: (value: boolean) => void;
   onLeave: () => void;
@@ -65,6 +67,8 @@ export function BoardToolbar({
   onGhost,
   grid,
   onGrid,
+  edgeFocus,
+  onEdgeFocus,
   sound,
   onSound,
   onLeave,
@@ -147,6 +151,12 @@ export function BoardToolbar({
               hint="Show where the pieces belong"
               checked={grid}
               onChange={onGrid}
+            />
+            <Toggle
+              label="Find the edges"
+              hint="Dim centre pieces without hiding or locking them"
+              checked={edgeFocus}
+              onChange={onEdgeFocus}
             />
             <Toggle
               label="Sound effects"

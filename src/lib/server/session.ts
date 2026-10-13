@@ -28,6 +28,7 @@
  * placed and one write per mouse move.
  */
 
+import { randomBytes, createCipheriv, createHash } from 'node:crypto';
 import type {
   Player,
   PlayerColorId,
@@ -35,6 +36,7 @@ import type {
   PuzzleSessionState,
   ResultPlayer,
   Room,
+  TugState,
   RoomSettings,
   RoomView,
   SessionResult,
@@ -57,7 +59,7 @@ const MAX_PING_TEXT = 90;
  * the point where "we'll finish it tomorrow" is still honoured and abandoned
  * rooms stop accumulating.
  */
-export const ROOM_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+export const ROOM_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /**
  * A lock is released this long after it was taken unless refreshed. Nothing
  * tells the server that a player closed their laptop mid-drag, so locks cannot
@@ -107,6 +109,9 @@ function buildView(record: RoomRecord, engine: PuzzleEngine, now: number): RoomV
     room: record.room,
     puzzle: record.puzzle,
     players: publicRoster(record, now),
+    chat: record.chat ?? [],
+    tugs: Object.values(record.tugs ?? {}),
+    history: record.history ?? [],
     session: {
       status: engine.status,
       startedAt: engine.startedAt,
@@ -264,6 +269,7 @@ export async function createRoomSession(input: CreateRoomInput): Promise<RoomRec
       createdAt: now,
       updatedAt: now,
       expiresAt: now + ROOM_TTL_MS,
+      round: 1,
     };
     const record: RoomRecord = {
       room,
@@ -272,6 +278,9 @@ export async function createRoomSession(input: CreateRoomInput): Promise<RoomRec
       players: [],
       seq: 0,
       locksAt: {},
+      chat: [],
+      tugs: {},
+      history: [],
     };
     if (await store.createRoom(record)) return record;
     // Code collision (or a transient failure); try another code.
@@ -315,12 +324,15 @@ export async function joinRoom(code: string, input: JoinInput): Promise<Outcome<
         seat.name = sanitizeName(input.name ?? seat.name);
         seat.avatar = sanitizeAvatar(input.avatar ?? seat.avatar);
         seat.lastSeenAt = now;
+        // Persist the same sequence we publish. Otherwise reconnecting a seat
+        // consumes an unrecorded number and causes a later false gap.
+        seq += 1;
         record.seq = seq;
         return {
           ok: true,
           dirty: true,
           deliveries: [
-            { to: null, envelope: { seq: ++seq, event: { t: 'presence', players: publicRoster(record, now) } } },
+            { to: null, envelope: { seq, event: { t: 'presence', players: publicRoster(record, now) } } },
           ],
           value: {
             playerId: seat.id,
@@ -340,9 +352,6 @@ export async function joinRoom(code: string, input: JoinInput): Promise<Outcome<
     // --- New seat -----------------------------------------------------------
     if (record.players.length >= MAX_PLAYERS) {
       return { ok: false, status: 409, error: 'This room is full.' };
-    }
-    if (record.room.status === 'complete' && record.players.length === 0) {
-      return { ok: false, status: 410, error: 'This puzzle has already been finished.' };
     }
 
     const taken = record.players.map((p) => p.colorId);
@@ -468,6 +477,7 @@ export async function applyClientEvents(
     }
 
     expireLocks(ctx);
+    expireTugs(ctx);
 
     for (const event of events) {
       switch (event.t) {
@@ -515,6 +525,21 @@ export async function applyClientEvents(
           break;
         case 'restart':
           onRestart(ctx);
+          break;
+        case 'typing':
+          emitLoose(ctx, { t: 'typing', playerId: ctx.seat.id, active: event.active });
+          break;
+        case 'chat':
+          onChat(ctx, event.text);
+          break;
+        case 'media':
+          onMedia(ctx, event);
+          break;
+        case 'rtc':
+          onRtc(ctx, event);
+          break;
+        case 'tug':
+          onTug(ctx, event);
           break;
         case 'bye':
           onBye(ctx);
@@ -618,6 +643,106 @@ function onPing(ctx: Ctx, event: Extract<ClientEvent, { t: 'ping' }>): void {
   });
 }
 
+
+/** Chat is tied to the room, not to any individual puzzle round. */
+function onChat(ctx: Ctx, raw: string): void {
+  const text = raw.replace(/\s+/g, ' ').trim().slice(0, 500);
+  if (!text) return;
+  const message = {
+    id: createId('msg', 12),
+    playerId: ctx.seat.id,
+    name: ctx.seat.name,
+    text,
+    createdAt: ctx.now,
+  };
+  ctx.record.chat = [...(ctx.record.chat ?? []).slice(-199), message];
+  emit(ctx, { t: 'chat', message });
+  ctx.dirty = true;
+  touch(ctx);
+}
+
+/** Offers, answers and ICE candidates are relayed only after seat authentication. */
+function onRtc(ctx: Ctx, event: Extract<ClientEvent, { t: 'rtc' }>): void {
+  if (event.to === ctx.seat.id) return;
+  const target = ctx.record.players.find(p => p.id === event.to);
+  if (!target || event.data.length > 20_000) return;
+  // The public room broadcast is transport, not authorization. Seal signaling
+  // with the target's secret seat token so other channel listeners cannot read
+  // or forge offers, answers, or network candidates.
+  const key = createHash('sha256').update(target.token).digest();
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const body = Buffer.concat([cipher.update(event.data, 'utf8'), cipher.final()]);
+  const sealed = Buffer.concat([iv, cipher.getAuthTag(), body]).toString('base64url');
+  emitTo(ctx, event.to, { t: 'rtc', playerId: ctx.seat.id, kind: event.kind, data: sealed });
+}
+
+function onMedia(ctx: Ctx, event: Extract<ClientEvent, { t: 'media' }>): void {
+  emitLoose(ctx, { t: 'media', playerId: ctx.seat.id, audio: event.audio, video: event.video });
+}
+
+const TUG_DURATION_MS = 1800;
+const TUG_WIN_SCORE = 72;
+function expireTugs(ctx: Ctx): void {
+  for (const contest of Object.values(ctx.record.tugs ?? {})) {
+    if (ctx.now < contest.endsAt) continue;
+    resolveTug(ctx, contest);
+  }
+}
+
+function resolveTug(ctx: Ctx, contest: TugState): void {
+  delete ctx.record.tugs?.[contest.g];
+  const actual = ctx.engine.lockHolder(contest.g);
+  let winner = contest.defender;
+  // Defender wins draws, and an inactive tug can never change piece ownership.
+  if (actual === contest.defender && contest.challengerScore > contest.defenderScore + 8) {
+    ctx.engine.release(contest.g, contest.defender);
+    const z = ctx.engine.grab(contest.g, contest.challenger);
+    if (z !== null) {
+      winner = contest.challenger;
+      ctx.record.locksAt[contest.g] = ctx.now;
+      emit(ctx, { t: 'grab', playerId: winner, g: contest.g, z });
+      save(ctx);
+    }
+  }
+  emitLoose(ctx, { t: 'tug', g: contest.g, contest: null, winner });
+  ctx.dirty = true;
+}
+
+/**
+ * A bounded, server-resolved contest. Pointer movement stays local; only
+ * quantized effort is submitted, so a contest cannot flood room storage.
+ */
+function onTug(ctx: Ctx, event: Extract<ClientEvent, { t: 'tug' }>): void {
+  if (ctx.record.room.status !== 'playing') return;
+  const defender = ctx.engine.lockHolder(event.g);
+  if (!defender || defender === ctx.seat.id && !ctx.record.tugs?.[event.g]) return;
+  let contest = ctx.record.tugs?.[event.g];
+  if (!contest) {
+    if (defender === ctx.seat.id) return;
+    contest = {
+      g: event.g,
+      defender,
+      challenger: ctx.seat.id,
+      defenderScore: 12,
+      challengerScore: 0,
+      endsAt: ctx.now + TUG_DURATION_MS,
+    };
+    ctx.record.tugs ??= {};
+    ctx.record.tugs[event.g] = contest;
+  }
+  if (ctx.seat.id !== contest.defender && ctx.seat.id !== contest.challenger) return;
+  const force = Math.min(12, Math.max(0, event.force));
+  if (ctx.seat.id === contest.defender) contest.defenderScore += force;
+  else contest.challengerScore += force;
+  if (contest.defenderScore >= TUG_WIN_SCORE || contest.challengerScore >= TUG_WIN_SCORE || ctx.now >= contest.endsAt) {
+    resolveTug(ctx, contest);
+  } else {
+    emitLoose(ctx, { t: 'tug', g: event.g, contest });
+    ctx.dirty = true;
+  }
+}
+
 /* --- lobby ---------------------------------------------------------------- */
 
 function onReady(ctx: Ctx, ready: boolean): void {
@@ -666,7 +791,7 @@ function onGrab(ctx: Ctx, groupId: number): void {
 
   const z = ctx.engine.grab(groupId, ctx.seat.id);
   if (z === null) {
-    emitTo(ctx, ctx.seat.id, { t: 'reject', reason: 'Someone else has that piece.' });
+    emitTo(ctx, ctx.seat.id, { t: 'reject', reason: 'Someone else has that piece.', session: ctx.engine.toState(), g: groupId });
     return;
   }
   ctx.record.locksAt[groupId] = ctx.now;
@@ -678,11 +803,18 @@ function onGrab(ctx: Ctx, groupId: number): void {
 function onDrop(ctx: Ctx, event: Extract<ClientEvent, { t: 'drop' }>): void {
   if (ctx.record.room.status !== 'playing') return;
   if (!Number.isFinite(event.ox) || !Number.isFinite(event.oy)) return;
-  if (ctx.engine.lockHolder(event.g) !== ctx.seat.id) return;
+  if (ctx.engine.lockHolder(event.g) !== ctx.seat.id) {
+    emitTo(ctx, ctx.seat.id, { t: 'reject', reason: 'Piece ownership changed.', session: ctx.engine.toState() });
+    return;
+  }
 
   const result = ctx.engine.drop(event.g, event.ox, event.oy, ctx.seat.id, ctx.now);
   ctx.engine.release(event.g, ctx.seat.id);
   delete ctx.record.locksAt[event.g];
+  if (ctx.record.tugs?.[event.g]) {
+    delete ctx.record.tugs[event.g];
+    emitLoose(ctx, { t: 'tug', g: event.g, contest: null });
+  }
   ctx.seat.lastSeenAt = ctx.now;
 
   if (result.moved) {
@@ -901,6 +1033,8 @@ function onRestart(ctx: Ctx): void {
   ctx.engine = PuzzleEngine.create(ctx.record.puzzle);
   ctx.record.room.status = 'lobby';
   ctx.record.locksAt = {};
+  ctx.record.tugs = {};
+  ctx.record.room.round = (ctx.record.room.round ?? 1) + 1;
   for (const seat of ctx.record.players) {
     seat.ready = false;
     seat.connections = 0;
@@ -912,7 +1046,7 @@ function onRestart(ctx: Ctx): void {
   save(ctx);
   emit(ctx, {
     t: 'snapshot',
-    seq: ctx.seq,
+    seq: ctx.seq + 1,
     view: buildView(ctx.record, ctx.engine, ctx.now),
     session: ctx.record.session,
   });
@@ -948,9 +1082,11 @@ function finish(ctx: Ctx): void {
   ctx.engine.completedAt ??= ctx.now;
   touch(ctx);
   save(ctx);
+  const result = buildResult(ctx.record, ctx.engine, ctx.now);
+  ctx.record.history = [...(ctx.record.history ?? []).slice(-29), result];
   emit(ctx, {
     t: 'complete',
-    result: buildResult(ctx.record, ctx.engine, ctx.now),
+    result,
     session: ctx.record.session!,
   });
 }
@@ -993,4 +1129,47 @@ export async function loadResult(code: string): Promise<SessionResult | null> {
   const engine = engineFor(record);
   if (!engine.isComplete()) return null;
   return buildResult(record, engine, Date.now());
+}
+
+/** A new picture starts another round without changing the room or its chat. */
+export async function changeRoomPuzzle(
+  code: string,
+  playerId: string,
+  token: string,
+  puzzle: Puzzle,
+): Promise<Outcome<{ round: number }>> {
+  return withRoom(code, (record, now) => {
+    const seat = record.players.find(p => p.id === playerId);
+    if (!seat || !safeEqual(seat.token, token)) return { ok: false, status: 401, error: 'Invalid seat credentials.' };
+    if (!seat.isHost) return { ok: false, status: 403, error: 'Only the host can choose the next puzzle.' };
+    if (record.room.status === 'playing') return { ok: false, status: 409, error: 'Finish the current puzzle first.' };
+    record.puzzle = puzzle;
+    record.room.puzzleId = puzzle.id;
+    record.room.gameType = puzzle.gameType;
+    record.room.settings = { ...record.room.settings, ...puzzle.settings };
+    record.room.status = 'lobby';
+    record.room.round = (record.room.round ?? 1) + 1;
+    record.session = null;
+    record.locksAt = {};
+    record.tugs = {};
+    for (const p of record.players) {
+      p.ready = false;
+      p.connections = 0;
+      p.hintPieceId = null;
+      p.hintRegion = null;
+      p.hintLevel = 0;
+    }
+    record.seq += 1;
+    record.room.updatedAt = now;
+    record.room.expiresAt = now + ROOM_TTL_MS;
+    const engine = PuzzleEngine.create(puzzle);
+    const seq = record.seq;
+    const event: ServerEvent = { t: 'snapshot', seq, view: buildView(record, engine, now), session: null };
+    return {
+      ok: true,
+      dirty: true,
+      deliveries: [{ to: null, envelope: { seq, event } }],
+      value: { round: record.room.round },
+    };
+  });
 }

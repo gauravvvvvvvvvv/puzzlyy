@@ -49,7 +49,7 @@ function roomTopic(code: string): string {
 const ROOM_EVENT = 'evt';
 
 /** One channel message per 100ms, matching Supabase's default client budget. */
-const PEER_FLUSH_MS = 100;
+const PEER_FLUSH_MS = 50;
 /** A single message stays small; beyond this the oldest coalescibles go. */
 const MAX_PEER_BATCH = 24;
 const MAX_PING_TEXT = 80;
@@ -209,6 +209,24 @@ export class SupabaseTransport extends BaseTransport {
 
     if (!payload.event || typeof payload.seq !== 'number') return;
     this.channelEnvelope({ seq: payload.seq, event: payload.event });
+  }
+
+  /*
+   * Fast path: do not wait for BaseTransport's HTTP-oriented 32ms outbox
+   * pump before starting the peer frame timer. The local drag is immediate
+   * and other players receive the latest pose directly over the socket.
+   */
+  override send(event: ClientEvent): void {
+    if (this.subscribed && PEER_EVENTS.has(event.t)) {
+      const translated = this.translate(event);
+      if (translated) {
+        this.enqueuePeer(translated);
+        if (event.t === 'react' || event.t === 'ping') this.flushPeer();
+        else this.armPeerTimer();
+      }
+      return;
+    }
+    super.send(event);
   }
 
   /* ------------------------------------------------------------------ */

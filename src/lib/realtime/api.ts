@@ -133,6 +133,27 @@ export function joinRoom(code: string, input: JoinInput): Promise<JoinResponse> 
   return postJson<JoinResponse>(`/api/rooms/${encodeURIComponent(code)}/join`, input);
 }
 
+/** Replace only the active round; keep the room, seats, and conversation. */
+export function selectRoomPuzzle(
+  code: string,
+  playerId: string,
+  token: string,
+  image: ImageAsset,
+  settings: PuzzleSettings,
+): Promise<{ round: number }> {
+  return postJson('/api/rooms/' + encodeURIComponent(code) + '/puzzle', {
+    playerId, token, image, settings, title: image.title,
+  });
+}
+
+export function fetchIceServers(
+  code: string,
+  playerId: string,
+  token: string,
+): Promise<{ iceServers: RTCIceServer[] }> {
+  return postJson('/api/rooms/' + encodeURIComponent(code) + '/ice', { playerId, token });
+}
+
 export interface EventsResponse {
   seq: number | null;
   applied: number;

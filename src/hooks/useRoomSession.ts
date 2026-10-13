@@ -28,7 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PuzzleEngine } from '@/lib/puzzle/engine';
 import { chime, mergeKey, snap } from '@/lib/puzzle/sound';
 import { ApiError, createTransport } from '@/lib/realtime';
-import { joinRoom } from '@/lib/realtime/api';
+import { joinRoom, selectRoomPuzzle, fetchIceServers, fetchRoom } from '@/lib/realtime/api';
 import { loadIdentity } from '@/lib/storage/identity';
 import { loadSeat, saveLastRoom, saveSeat } from '@/lib/storage/seats';
 import type {
@@ -38,6 +38,10 @@ import type {
   ServerEvent,
 } from '@/types/events';
 import type {
+  ChatMessage,
+  TugState,
+  ImageAsset,
+  PuzzleSettings,
   Player,
   Puzzle,
   ResultPlayer,
@@ -121,11 +125,19 @@ export interface RoomSession {
   pings: PingMark[];
   hint: HintNotice | null;
   clearHint: () => void;
+  chat: ChatMessage[];
+  tugs: TugState[];
+  contested: { g: number; id: number } | null;
+  history: SessionResult[];
+  signals: Array<{ id: number; event: Extract<ServerEvent, { t: 'media' | 'rtc' | 'typing' }> }>;
+  choosePuzzle: (image: ImageAsset, settings: PuzzleSettings) => Promise<void>;
+  loadIceServers: () => Promise<RTCIceServer[]>;
+  decodeSignal: (sealed: string) => Promise<string>;
 
   send: (event: ClientEvent) => void;
   flush: () => void;
   /** Called whenever the engine changed and the canvas needs to repaint. */
-  subscribe: (listener: () => void) => () => void;
+  subscribe: (listener: (event?: ServerEvent) => void) => () => void;
   /** Recompute the numbers in the chrome. Coalesced. */
   refreshStats: () => void;
 }
@@ -164,6 +176,14 @@ export function useRoomSession(code: string): RoomSession {
   const [reactions, setReactions] = useState<ReactionBurst[]>([]);
   const [pings, setPings] = useState<PingMark[]>([]);
   const [hint, setHint] = useState<HintNotice | null>(null);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
+  const [history, setHistory] = useState<SessionResult[]>([]);
+  const [tugs, setTugs] = useState<TugState[]>([]);
+  const [contested, setContested] = useState<{g:number;id:number} | null>(null);
+  const [signals, setSignals] = useState<Array<{ id: number; event: Extract<ServerEvent, { t: 'media' | 'rtc' | 'typing' }> }>>([]);
+  const signalCounterRef = useRef(0);
+  const tokenRef = useRef('');
+  const tugsRef = useRef<TugState[]>([]);
 
   const cursorsRef = useRef<Map<string, CursorMark>>(new Map());
   const transportRef = useRef<RealtimeTransport | null>(null);
@@ -171,7 +191,7 @@ export function useRoomSession(code: string): RoomSession {
   /** Read inside event handlers, where React state would be a render behind. */
   const puzzleRef = useRef<Puzzle | null>(null);
   const myIdRef = useRef('');
-  const listenersRef = useRef(new Set<() => void>());
+  const listenersRef = useRef(new Set<(event?: ServerEvent) => void>());
   const statsTimerRef = useRef<number | null>(null);
   const timersRef = useRef(new Set<number>());
   /** Who was connected last time we looked, for "friend disconnected" toasts. */
@@ -179,15 +199,15 @@ export function useRoomSession(code: string): RoomSession {
 
   /* --- plumbing ----------------------------------------------------------- */
 
-  const subscribe = useCallback((listener: () => void) => {
+  const subscribe = useCallback((listener: (event?: ServerEvent) => void) => {
     listenersRef.current.add(listener);
     return () => {
       listenersRef.current.delete(listener);
     };
   }, []);
 
-  const markDirty = useCallback(() => {
-    for (const listener of listenersRef.current) listener();
+  const markDirty = useCallback((event?: ServerEvent) => {
+    for (const listener of listenersRef.current) listener(event);
   }, []);
 
   const refreshStats = useCallback(() => {
@@ -243,6 +263,10 @@ export function useRoomSession(code: string): RoomSession {
           setRoom(event.view.room);
           holdPuzzle(event.view.puzzle);
           setPlayers(event.view.players);
+          setChat(event.view.chat ?? []);
+          setHistory(event.view.history ?? []);
+          setTugs(event.view.tugs ?? []);
+          tugsRef.current = event.view.tugs ?? [];
           if (event.session) {
             installEngine(PuzzleEngine.fromState(event.session, event.view.puzzle));
           } else {
@@ -286,6 +310,7 @@ export function useRoomSession(code: string): RoomSession {
         }
 
         case 'start': {
+          setTugs([]);
           setRoom((value) => (value ? { ...value, status: 'playing' } : value));
           setResult(null);
           setPlayers((list) => list.map((p) => ({ ...p, ready: true })));
@@ -297,6 +322,33 @@ export function useRoomSession(code: string): RoomSession {
           return;
         }
 
+        case 'chat': {
+          // Never display a message solely on the authority of a broadcast
+          // frame. Reload the committed room record instead; peer broadcasts
+          // can be forged on the public channel.
+          void fetchRoom(code)
+            .then(fresh => setChat(fresh.view.chat ?? []))
+            .catch(() => undefined);
+          return;
+        }
+        case 'tug': {
+          const next = [
+            ...tugsRef.current.filter(t => t.g !== event.g),
+            ...(event.contest ? [event.contest] : []),
+          ];
+          tugsRef.current = next;
+          setTugs(next);
+          if (event.winner && event.winner === mine) setNotice('You won the tug!');
+          return;
+        }
+        case 'typing':
+        case 'media':
+        case 'rtc': {
+          if (event.playerId === mine) return;
+          const id = ++signalCounterRef.current;
+          setSignals(current => [...current.slice(-199), { id, event }]);
+          return;
+        }
         case 'cursor': {
           if (event.playerId === mine) return;
           cursorsRef.current.set(event.playerId, {
@@ -329,7 +381,7 @@ export function useRoomSession(code: string): RoomSession {
           // only trustworthy while the sender still holds the lock.
           if (!current || current.lockHolder(event.g) !== event.by) return;
           current.applyTransform(event.g, event.ox, event.oy);
-          markDirty();
+          markDirty(event);
           return;
         }
 
@@ -410,6 +462,7 @@ export function useRoomSession(code: string): RoomSession {
         }
 
         case 'complete': {
+          setTugs([]);
           setRoom((value) => (value ? { ...value, status: 'complete' } : value));
           setResult(event.result);
           if (puzzleRef.current) {
@@ -420,6 +473,17 @@ export function useRoomSession(code: string): RoomSession {
 
         case 'reject': {
           setNotice(event.reason);
+          // If simultaneous optimistic grabs race, invite the losing
+          // player into the contest rather than dropping their intent.
+          if (event.g !== undefined) {
+            setContested({ g: event.g, id: Date.now() });
+            transportRef.current?.send({ t: 'tug', g: event.g, force: 0 });
+            window.setTimeout(() => {
+              if (tugsRef.current.some(t => t.g === event.g)) {
+                transportRef.current?.send({ t: 'tug', g: event.g!, force: 0 });
+              }
+            }, 1950);
+          }
           if (event.session && puzzleRef.current) {
             installEngine(PuzzleEngine.fromState(event.session, puzzleRef.current));
           }
@@ -430,7 +494,7 @@ export function useRoomSession(code: string): RoomSession {
           return;
       }
     },
-    [holdPuzzle, installEngine, later, markDirty, refreshStats],
+    [code, holdPuzzle, installEngine, later, markDirty, refreshStats],
   );
 
   /* --- join + connect ----------------------------------------------------- */
@@ -453,6 +517,7 @@ export function useRoomSession(code: string): RoomSession {
         if (cancelled) return;
 
         saveSeat(code, join.playerId, join.token);
+        tokenRef.current = join.token;
         saveLastRoom(code, join.view.puzzle.title);
 
         myIdRef.current = join.playerId;
@@ -460,6 +525,10 @@ export function useRoomSession(code: string): RoomSession {
         setRoom(join.view.room);
         holdPuzzle(join.view.puzzle);
         setPlayers(join.view.players);
+        setChat(join.view.chat ?? []);
+        setHistory(join.view.history ?? []);
+        setTugs(join.view.tugs ?? []);
+        tugsRef.current = join.view.tugs ?? [];
         connectedRef.current = new Set(
           join.view.players.filter((p) => p.connected).map((p) => p.id),
         );
@@ -569,6 +638,35 @@ export function useRoomSession(code: string): RoomSession {
     transportRef.current?.flush();
   }, []);
 
+  const choosePuzzle = useCallback(async (image: ImageAsset, settings: PuzzleSettings) => {
+    if (!myIdRef.current || !tokenRef.current) throw new Error('You are not connected to this room.');
+    await selectRoomPuzzle(code, myIdRef.current, tokenRef.current, image, settings);
+  }, [code]);
+
+  const loadIceServers = useCallback(async (): Promise<RTCIceServer[]> => {
+    if (!myIdRef.current || !tokenRef.current) throw new Error('No active room seat.');
+    const response = await fetchIceServers(code, myIdRef.current, tokenRef.current);
+    return response.iceServers;
+  }, [code]);
+
+  const decodeSignal = useCallback(async (sealed: string): Promise<string> => {
+    if (!tokenRef.current) throw new Error('No active room seat.');
+    const normalized = sealed.replace(/-/g, '+').replace(/_/g, '/');
+    const binary = atob(normalized);
+    const payload = Uint8Array.from(binary, char => char.charCodeAt(0));
+    if (payload.byteLength < 29) throw new Error('Invalid signal');
+    const iv = payload.slice(0, 12);
+    const tag = payload.slice(12, 28);
+    const ciphertext = payload.slice(28);
+    const merged = new Uint8Array(ciphertext.length + tag.length);
+    merged.set(ciphertext);
+    merged.set(tag, ciphertext.length);
+    const raw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(tokenRef.current));
+    const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, merged);
+    return new TextDecoder().decode(plain);
+  }, []);
+
   const dismissNotice = useCallback(() => setNotice(null), []);
   const clearHint = useCallback(() => setHint(null), []);
 
@@ -606,6 +704,14 @@ export function useRoomSession(code: string): RoomSession {
     pings,
     hint,
     clearHint,
+    chat,
+    tugs,
+    contested,
+    history,
+    signals,
+    choosePuzzle,
+    loadIceServers,
+    decodeSignal,
     send,
     flush,
     subscribe,

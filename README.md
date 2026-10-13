@@ -301,6 +301,63 @@ transport and room record don't change.
 | Hidden Objects | 1–4 | 🚧 Planned |
 | Escape Room | 2–4 | 🚧 Planned |
 
+
+## Multiplayer playground upgrade (October 2026)
+
+### Room continuity
+
+A room is now a social space rather than a one-puzzle session. Finishing
+a puzzle leaves everyone in the room, including their chat and call. The host
+can choose a new image and difficulty from within the same room or reshuffle
+the current puzzle. The invite link and player seats do not change.
+Rooms and uploaded assets expire after **30 days without activity** so that
+unused rooms do not accumulate forever. Chat is capped at the most recent
+200 messages per room; the completed-puzzle history is capped at 30 rounds.
+No account is required.
+
+### Fast board and contested pieces
+
+- Local dragging still bypasses React and the network.
+- Peer pose updates use a faster 50 ms coalesced broadcast path, with client
+  interpolation; server-confirmed grabs/drops remain authoritative.
+- A stale or competing pickup is reconciled against authoritative state.
+- When two players pull the same held piece, a bounded tug-of-war contest
+  resolves ownership on the server. The local camera never leaves its player.
+- The board offers an edge finder, snap preview and shared milestone moments.
+
+These changes reduce unnecessary waiting; they do not promise zero network
+latency. Measure both local pointer-to-paint and other-player pose-to-paint
+when evaluating performance.
+
+### Room chat and calls
+
+Text chat and typing notifications work automatically in a room, on every
+screen. Chat notifications are confirmed against persisted server history before
+display. WebRTC signaling is sealed for its intended recipient with AES-GCM
+using their authenticated seat token; anonymous room-channel subscribers cannot
+decode valid offers or ICE candidates. Voice and video are off by default and are only requested by clicking
+the corresponding controls. Call signaling uses the authenticated room event
+endpoint. Media is browser-to-browser WebRTC, with one mesh connection per
+participant. Six-way video is relatively expensive; for larger rooms replace
+the mesh with an SFU rather than increasing the peer limit.
+
+For restrictive NAT/firewall networks, configure a coturn relay in
+**shared-secret / REST authentication mode** with:
+
+- Server-only TURN_URL (comma-separated TURN/TURNS URLs)
+- Server-only TURN_SHARED_SECRET (same value as coturn's static-auth-secret)
+
+The server mints per-seat credentials that expire after one hour. Do not put
+a persistent TURN password in any NEXT_PUBLIC_ environment variable.
+Without TURN, calls rely on STUN and may fail on some networks. Browsers also
+require HTTPS (or localhost) for microphone/camera access.
+
+For protocol regression tests, run a local server and then:
+
+    node scripts/smoke-social.mjs http://localhost:3000
+
+The existing smoke tests remain useful for baseline puzzle correctness.
+
 ## License
 
 Puzzly is **source-available, not open source**. You may inspect the code for evaluation, learning, and security review, but you may not copy, modify, redistribute, sublicense, host, commercialize, or build derivative products from it without prior written permission. See [LICENSE](LICENSE).

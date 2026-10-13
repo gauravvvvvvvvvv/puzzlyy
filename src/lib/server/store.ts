@@ -29,6 +29,9 @@
 
 import type {
   Challenge,
+  ChatMessage,
+  TugState,
+  SessionResult,
   ImageAsset,
   Player,
   Puzzle,
@@ -91,6 +94,9 @@ export interface RoomRecord {
    * engine stays free of wall-clock concerns and usable for solo play.
    */
   locksAt: Record<number, number>;
+  chat?: ChatMessage[];
+  tugs?: Record<number, TugState>;
+  history?: SessionResult[];
 }
 
 /** A record plus the row version it was read at, for compare-and-swap. */
@@ -160,7 +166,7 @@ export interface RoomStore {
  * room and the picture in it — go away on the same schedule, so there is one
  * rule to explain rather than two.
  */
-export const IMAGE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+export const IMAGE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /* -------------------------------------------------------------------------- */
 /* Memory adapter                                                             */
@@ -543,6 +549,9 @@ function migrate(record: RoomRecord): RoomRecord {
     players: Array.isArray(record.players) ? record.players : [],
     seq: typeof record.seq === 'number' ? record.seq : 0,
     locksAt: record.locksAt && typeof record.locksAt === 'object' ? record.locksAt : {},
+    chat: Array.isArray(record.chat) ? record.chat : [],
+    tugs: record.tugs && typeof record.tugs === 'object' ? record.tugs : {},
+    history: Array.isArray(record.history) ? record.history : [],
   };
 }
 

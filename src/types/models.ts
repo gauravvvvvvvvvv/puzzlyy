@@ -146,6 +146,23 @@ export interface Player {
   connections: number;
 }
 
+export interface ChatMessage {
+  id: string;
+  playerId: string;
+  name: string;
+  text: string;
+  createdAt: number;
+}
+
+export interface TugState {
+  g: number;
+  defender: string;
+  challenger: string;
+  defenderScore: number;
+  challengerScore: number;
+  endsAt: number;
+}
+
 export type RoomStatus = 'lobby' | 'playing' | 'complete' | 'abandoned';
 
 export interface RoomSettings extends PuzzleSettings {
@@ -167,6 +184,8 @@ export interface Room {
   createdAt: number;
   updatedAt: number;
   expiresAt: number;
+  /** Number of puzzles played together without changing the invite URL. */
+  round?: number;
 }
 
 /** Room + the data a client needs to render the lobby, in one payload. */
@@ -175,6 +194,10 @@ export interface RoomView {
   puzzle: Puzzle;
   players: Player[];
   session: SessionSummary | null;
+  /** A bounded conversation, persisted independently of the current round. */
+  chat?: ChatMessage[];
+  tugs?: TugState[];
+  history?: SessionResult[];
 }
 
 /* -------------------------------------------------------------------------- */

@@ -288,6 +288,26 @@ function parseClientEvent(value: unknown): ClientEvent | null {
       return { t: 'resync' };
     case 'restart':
       return { t: 'restart' };
+    case 'typing':
+      return { t: 'typing', active: asBool(raw.active) };
+    case 'chat': {
+      const text = asString(raw.text, 500);
+      return text ? { t: 'chat', text } : null;
+    }
+    case 'tug': {
+      const g = groupId();
+      const force = asInt(raw.force, 0, 12);
+      return g === null || force === null ? null : { t: 'tug', g, force };
+    }
+    case 'media':
+      return { t: 'media', audio: asBool(raw.audio), video: asBool(raw.video) };
+    case 'rtc': {
+      const to = asString(raw.to, 40);
+      const data = asString(raw.data, 20000);
+      const kind = raw.kind;
+      return to && data && (kind === 'offer' || kind === 'answer' || kind === 'candidate')
+        ? { t: 'rtc', to, data, kind } : null;
+    }
     case 'bye':
       return { t: 'bye' };
     default:
