@@ -14,7 +14,8 @@
  * re-cutting it on every restart and every reconnect.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button, ButtonLink } from '@/components/ui/Button';
@@ -27,6 +28,8 @@ import { usePieceAtlas } from '@/hooks/usePieceAtlas';
 import { useRoomSession } from '@/hooks/useRoomSession';
 import { markPlayed, recordCompletion, rememberPuzzle } from '@/lib/storage/library';
 import { clearLastRoom, clearSeat } from '@/lib/storage/seats';
+import { RoomSocial } from '@/features/rooms/RoomSocial';
+import { NextPuzzlePicker } from '@/features/rooms/NextPuzzlePicker';
 
 export interface RoomClientProps {
   code: string;
@@ -40,6 +43,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
   const { phase, room, puzzle, engine, players, me, myId, isHost, connection, result, stats } =
     session;
   const { send, flush } = session;
+  const [showNextPuzzle, setShowNextPuzzle] = useState(false);
 
   /* --- cutting the pieces -------------------------------------------------- */
 
@@ -122,6 +126,26 @@ export function RoomClient({ code, solo }: RoomClientProps) {
     [cut.atlas, cut.error, cut.progress],
   );
 
+  /* --- persistent room shell ----------------------------------------------- */
+
+  const frame = (content: ReactNode) => (
+    <div className="flex h-[100dvh] min-w-0 overflow-hidden">
+      <main className={'relative min-w-0 flex-1 ' +
+        (phase === 'playing' ? 'overflow-hidden' : 'overflow-y-auto')}>
+        {showNextPuzzle && phase !== 'playing'
+          ? <NextPuzzlePicker session={session} onClose={() => setShowNextPuzzle(false)} />
+          : content}
+        {isHost && !showNextPuzzle && phase !== 'playing' && (
+          <button type="button" onClick={() => setShowNextPuzzle(true)}
+            className="fixed bottom-4 left-4 z-30 rounded-xl border border-[var(--line)] bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white shadow-lg">
+            Choose another puzzle
+          </button>
+        )}
+      </main>
+      <RoomSocial session={session} code={code} />
+    </div>
+  );
+
   /* --- screens ------------------------------------------------------------- */
 
   if (phase === 'error') {
@@ -147,9 +171,9 @@ export function RoomClient({ code, solo }: RoomClientProps) {
 
   if (phase === 'complete') {
     if (!result) {
-      return <Curtain title="Adding up the results…" body="One moment." spinner />;
+      return frame(<Curtain title="Adding up the results…" body="One moment." spinner />);
     }
-    return (
+    return frame(
       <div className="min-h-[100dvh] overflow-y-auto">
         <Completion
           result={result}
@@ -166,7 +190,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
 
   if (phase === 'playing') {
     if (cut.error) {
-      return (
+      return frame(
         <Curtain title="That picture would not cut" body={cut.error}>
           <Button variant="primary" onClick={() => location.reload()}>
             <Icon name="again" size={18} />
@@ -179,7 +203,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
       );
     }
     if (!cut.atlas) {
-      return (
+      return frame(
         <Curtain
           title={`Cutting ${puzzle.pieceCount} pieces…`}
           body="Shaping every tab and notch. This only happens once."
@@ -187,7 +211,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
         />
       );
     }
-    return (
+    return frame(
       <PuzzleRoom
         session={session}
         engine={engine}
@@ -203,7 +227,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
   // Lobby. A solo player never sees it — they are already being started above,
   // so showing them an invite panel for a beat would be a small lie.
   if (solo) {
-    return (
+    return frame(
       <Curtain
         title={cutting.ready ? 'Setting up your board…' : `Cutting ${puzzle.pieceCount} pieces…`}
         body="Yours alone. No one else can wander in."
@@ -212,7 +236,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
     );
   }
 
-  return (
+  return frame(
     <div className="min-h-[100dvh] overflow-y-auto">
       <Lobby
         room={room}

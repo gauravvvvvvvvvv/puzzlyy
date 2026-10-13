@@ -80,6 +80,7 @@ export class PuzzleRenderer {
   remoteLocks: RemoteLock[] = [];
   snapPreview: { groupId: number; ox: number; oy: number } | null = null;
   draggingGroup: number | null = null;
+  edgeFocus = false;
   onCameraChange: ((camera: Camera) => void) | null = null;
 
   private pulses = new Map<number, number>();
@@ -91,6 +92,10 @@ export class PuzzleRenderer {
     duration: number;
   } | null = null;
   private groupBoundsCache = new Map<number, { key: number; box: Box }>();
+  private remotePainted = new Map<number, { x: number; y: number }>();
+  private remoteMotion = new Map<number, {
+    fromX: number; fromY: number; toX: number; toY: number; start: number;
+  }>();
   private hitCtx: CanvasRenderingContext2D;
 
   constructor(opts: RendererOptions) {
@@ -135,6 +140,16 @@ export class PuzzleRenderer {
 
   invalidate(): void {
     this.dirty = true;
+  }
+
+  /** Remote poses ease on the renderer only; authoritative engine state is exact. */
+  noteRemoteMove(id: number, x: number, y: number): void {
+    const painted = this.remotePainted.get(id);
+    if (!painted) return;
+    this.remoteMotion.set(id, {
+      fromX: painted.x, fromY: painted.y, toX: x, toY: y, start: performance.now(),
+    });
+    this.invalidate();
   }
 
   resize(): void {
@@ -351,7 +366,10 @@ export class PuzzleRenderer {
       }
       this.dirty = true;
     }
-    if (this.hint || this.snapPreview || this.completionAt) this.dirty = true;
+    for (const [id, transition] of this.remoteMotion) {
+      if (now - transition.start > 110) this.remoteMotion.delete(id);
+    }
+    if (this.hint || this.snapPreview || this.completionAt || this.remoteMotion.size) this.dirty = true;
     if (this.completionAt && now - this.completionAt > 2600) this.completionAt = 0;
 
     if (!this.dirty) return;
@@ -454,8 +472,25 @@ export class PuzzleRenderer {
       const pulseT = this.pulses.get(group.id);
       const lifted = this.draggingGroup === group.id;
 
+      const motion = this.remoteMotion.get(group.id);
+      let paintX = group.ox;
+      let paintY = group.oy;
+      if (motion) {
+        const progress = Math.min(1, (now - motion.start) / 85);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        paintX = motion.fromX + (motion.toX - motion.fromX) * eased;
+        paintY = motion.fromY + (motion.toY - motion.fromY) * eased;
+        if (progress >= 1) this.remoteMotion.delete(group.id);
+      }
+      this.remotePainted.set(group.id, { x: paintX, y: paintY });
       ctx.save();
-      ctx.translate(group.ox, group.oy);
+      // Edge finder keeps every piece interactive while softly dimming centres.
+      if (this.edgeFocus && group.pieces.every(id => {
+        const p = this.engine.pieces[id];
+        return p.row > 0 && p.col > 0 &&
+          p.row < g.rows - 1 && p.col < g.cols - 1;
+      })) ctx.globalAlpha = 0.28;
+      ctx.translate(paintX, paintY);
       if (group.rot) ctx.rotate((group.rot * Math.PI) / 2);
 
       if (pulseT !== undefined) {

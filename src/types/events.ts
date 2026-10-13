@@ -10,6 +10,8 @@
 
 import type {
   Player,
+  ChatMessage,
+  TugState,
   PuzzleSessionState,
   RoomStatus,
   RoomView,
@@ -49,6 +51,12 @@ export type ClientEvent =
   /** Host re-cuts the same picture for a rematch. */
   | { t: 'restart' }
   /** Voluntary, explicit leave (closing a tab is handled by the SSE close). */
+  | { t: 'chat'; text: string }
+  | { t: 'typing'; active: boolean }
+  | { t: 'tug'; g: number; force: number }
+  /** Authenticated signaling, never direct unauthenticated channel broadcasts. */
+  | { t: 'media'; audio: boolean; video: boolean }
+  | { t: 'rtc'; to: string; kind: 'offer' | 'answer' | 'candidate'; data: string }
   | { t: 'bye' };
 
 export interface ClientEnvelope {
@@ -105,7 +113,12 @@ export type ServerEvent =
     }
   | { t: 'complete'; result: SessionResult; session: PuzzleSessionState }
   /** Server refused a request; client should reconcile from `session`. */
-  | { t: 'reject'; reason: string; session?: PuzzleSessionState }
+  | { t: 'reject'; reason: string; session?: PuzzleSessionState; g?: number }
+  | { t: 'chat'; message: ChatMessage }
+  | { t: 'typing'; playerId: string; active: boolean }
+  | { t: 'tug'; contest: TugState | null; g: number; winner?: string }
+  | { t: 'media'; playerId: string; audio: boolean; video: boolean }
+  | { t: 'rtc'; playerId: string; kind: 'offer' | 'answer' | 'candidate'; data: string }
   | { t: 'pong'; now: number };
 
 export interface SplitGroup {

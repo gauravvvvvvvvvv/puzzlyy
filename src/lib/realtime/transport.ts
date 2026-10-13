@@ -35,7 +35,7 @@ import { ApiError, beaconEvents, postEvents } from './api';
 import { Outbox } from './outbox';
 
 /** ~12 batches/second. With coalescing that is the real event rate. */
-const FLUSH_MS = 80;
+const FLUSH_MS = 32;
 const MAX_BATCH = 40;
 /** Lock TTL is 20s server-side, so this gives two chances before expiry. */
 const ALIVE_MS = 8_000;
@@ -278,6 +278,9 @@ export abstract class BaseTransport implements RealtimeTransport {
       this.handleSendError(error, remaining);
     } finally {
       this.sending = false;
+      // An urgent drop may have arrived while a previous HTTP request was
+      // in flight. Start it immediately rather than waiting for the interval.
+      if (this.outbox.pending && !this.disposed) queueMicrotask(() => void this.pump());
     }
   }
 

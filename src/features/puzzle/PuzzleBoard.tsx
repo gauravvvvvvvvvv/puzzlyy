@@ -50,6 +50,7 @@ export interface PuzzleBoardProps {
   /** Reference-image ghost inside the solved slot. */
   ghost: boolean;
   grid: boolean;
+  edgeFocus: boolean;
   /** True once the puzzle is finished — input stops, the picture stays. */
   frozen: boolean;
   /**
@@ -71,6 +72,7 @@ type Gesture =
   | { kind: 'none' }
   | { kind: 'pan'; id: number; x: number; y: number }
   | { kind: 'drag'; id: number; g: number; dx: number; dy: number; moved: boolean }
+  | { kind: 'tug'; id: number; g: number; x: number; y: number; lastAt: number }
   | { kind: 'pinch'; a: number; b: number; dist: number; mx: number; my: number };
 
 export function PuzzleBoard({
@@ -83,6 +85,7 @@ export function PuzzleBoard({
   reducedMotion,
   ghost,
   grid,
+  edgeFocus,
   frozen,
   pingArmed,
   onPlacePing,
@@ -99,6 +102,10 @@ export function PuzzleBoard({
   const spaceRef = useRef(false);
   const cursorNodesRef = useRef(new Map<string, HTMLDivElement>());
   const handledPingRef = useRef<string | null>(null);
+  const tugsRef = useRef(session.tugs);
+  tugsRef.current = session.tugs;
+  const tugSentAtRef = useRef(0);
+  const lastHoverHitAt = useRef(0);
 
   /** Read inside handlers and the rAF loop, where props would be stale. */
   const playersRef = useRef<Player[]>(session.players);
@@ -187,7 +194,8 @@ export function PuzzleBoard({
 
     // Remote mutations land in the engine without React hearing about it, so the
     // repaint has to be triggered from the same channel.
-    const unsubscribe = subscribe(() => {
+    const unsubscribe = subscribe((event) => {
+      if (event?.t === 'move') renderer.noteRemoteMove(event.g, event.ox, event.oy);
       renderer.remoteLocks = remoteLocks();
       renderer.invalidate();
     });
@@ -205,6 +213,26 @@ export function PuzzleBoard({
     // renderer — and the atlas it holds — survives ordinary re-renders.
   }, [engine, atlas, image, remoteLocks, rendererRef, subscribe]);
 
+  // An optimistic grab that lost a server race changes into a tug without
+  // requiring the player to release and click the same piece again.
+  useEffect(() => {
+    const contested = session.contested;
+    const gesture = gestureRef.current;
+    if (!contested || gesture.kind !== 'drag' || gesture.g !== contested.g) return;
+    const screen = pointersRef.current.get(gesture.id);
+    if (!screen) return;
+    gestureRef.current = {
+      kind: 'tug', id: gesture.id, g: gesture.g,
+      x: screen.x, y: screen.y, lastAt: 0,
+    };
+    const renderer = rendererRef.current;
+    if (renderer) {
+      renderer.draggingGroup = null;
+      renderer.snapPreview = null;
+      renderer.invalidate();
+    }
+  }, [session.contested, rendererRef]);
+
   /* --- cheap renderer settings, no rebuild ------------------------------- */
 
   useEffect(() => {
@@ -216,8 +244,9 @@ export function PuzzleBoard({
     if (!renderer) return;
     renderer.ghostOpacity = ghost ? 0.16 : 0;
     renderer.showGrid = grid;
+    renderer.edgeFocus = edgeFocus;
     renderer.invalidate();
-  }, [ghost, grid, rendererRef]);
+  }, [ghost, grid, edgeFocus, rendererRef]);
 
   // The palette lives in CSS, so the canvas has to be told when it changes.
   useEffect(() => {
@@ -449,9 +478,18 @@ export function PuzzleBoard({
           const engineNow = engineRef.current;
           const z = engineNow.grab(hit.groupId, myId);
           if (z === null) {
-            // Someone else has it. Fall through to panning rather than
-            // fighting them for it (spec §18).
+            // Locked piece: start a short, server-resolved tug contest.
+            // Panning would move this player's viewport unexpectedly.
+            gestureRef.current = { kind: 'tug', id: event.pointerId, g: hit.groupId,
+              x: screen.x, y: screen.y, lastAt: 0 };
+            send({ t: 'tug', g: hit.groupId, force: 0 });
+            window.setTimeout(() => {
+              if (tugsRef.current.some(t => t.g === hit.groupId)) {
+                send({ t: 'tug', g: hit.groupId, force: 0 });
+              }
+            }, 1950);
             setCursorStyle('grabbing');
+            return;
           } else {
             const group = engineNow.getGroup(hit.groupId);
             if (group) {
@@ -505,8 +543,31 @@ export function PuzzleBoard({
         return;
       }
 
+      if (gesture.kind === 'tug' && gesture.id === event.pointerId) {
+        const now = performance.now();
+        const motion = Math.hypot(screen.x - gesture.x, screen.y - gesture.y);
+        if (now - gesture.lastAt >= 130 && motion > 3) {
+          send({ t: 'tug', g: gesture.g, force: Math.min(12, Math.round(motion / 6)) });
+          gestureRef.current = { ...gesture, x: screen.x, y: screen.y, lastAt: now };
+        }
+        return;
+      }
+
       if (gesture.kind === 'drag' && gesture.id === event.pointerId) {
         const engineNow = engineRef.current;
+        // An authoritative tug win or rejected grab can revoke this hold.
+        if (engineNow.lockHolder(gesture.g) !== myId) {
+          gestureRef.current = { kind: 'none' };
+          renderer.draggingGroup = null;
+          renderer.snapPreview = null;
+          renderer.invalidate();
+          return;
+        }
+        const duel = tugsRef.current.find(t => t.g === gesture.g);
+        if (duel && performance.now() - tugSentAtRef.current > 130) {
+          tugSentAtRef.current = performance.now();
+          send({ t: 'tug', g: gesture.g, force: 8 });
+        }
         engineNow.movePiece(gesture.g, world.x - gesture.dx, world.y - gesture.dy, myId);
         const group = engineNow.getGroup(gesture.g);
         if (!group) {
@@ -539,7 +600,12 @@ export function PuzzleBoard({
       if (!frozenRef.current) {
         send({ t: 'cursor', x: world.x, y: world.y, down: false });
         // A cheap affordance: the hand only opens over something grabbable.
-        setCursorStyle(renderer.pickPiece(world.x, world.y) ? 'grab' : 'default');
+        // Hover outlines need only ~20Hz hit-testing; dragging stays full-rate.
+        const now = performance.now();
+        if (now - lastHoverHitAt.current >= 50) {
+          lastHoverHitAt.current = now;
+          setCursorStyle(renderer.pickPiece(world.x, world.y) ? 'grab' : 'default');
+        }
       }
     },
     [myId, pointerRef, rendererRef, screenPoint, send],
@@ -550,6 +616,12 @@ export function PuzzleBoard({
       const renderer = rendererRef.current;
       pointersRef.current.delete(pointerId);
       const gesture = gestureRef.current;
+
+      if (gesture.kind === 'tug' && gesture.id === pointerId) {
+        gestureRef.current = { kind: 'none' };
+        setCursorStyle('grab');
+        return;
+      }
 
       if (gesture.kind === 'pinch') {
         // A finger left mid-pinch. If one is still down, carry on panning with
@@ -570,7 +642,7 @@ export function PuzzleBoard({
           renderer.snapPreview = null;
         }
 
-        if (group && !cancelled) {
+        if (group && !cancelled && engineNow.lockHolder(gesture.g) === myId) {
           const ox = group.ox;
           const oy = group.oy;
           // The server decides whether this snapped; it is told first so the
@@ -667,6 +739,33 @@ export function PuzzleBoard({
         // A canvas has no useful context menu, and right-drag is a pan.
         onContextMenu={(event) => event.preventDefault()}
       />
+
+      {session.tugs.length > 0 && (
+        <div className="pointer-events-none absolute inset-x-3 top-3 z-20 mx-auto max-w-xs space-y-2">
+          {session.tugs.map(contest => {
+            const a = session.players.find(p => p.id === contest.defender)?.name ?? 'Player 1';
+            const b = session.players.find(p => p.id === contest.challenger)?.name ?? 'Player 2';
+            const total = Math.max(1, contest.defenderScore + contest.challengerScore);
+            return (
+              <div key={contest.g} role="status"
+                className="rounded-xl border border-[var(--line)] bg-[var(--surface)]/95 p-3 shadow-lg backdrop-blur">
+                <p className="text-center text-sm font-semibold">Tug of war! Pull the piece</p>
+                <div className="mt-2 flex justify-between text-xs">
+                  <span>{a}</span><span>{b}</span>
+                </div>
+                <div className="mt-1 flex h-2 overflow-hidden rounded-full bg-[var(--surface-inset)]">
+                  <div className="bg-blue-400 transition-[width] duration-100"
+                    style={{ width: String(contest.defenderScore / total * 100) + '%' }} />
+                  <div className="flex-1 bg-orange-400" />
+                </div>
+                <p className="mt-1 text-center text-2xs text-[var(--fg-muted)]">
+                  Both players can pull with their pointer. Best effort wins.
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div ref={overlayRef} className="pointer-events-none absolute inset-0 overflow-hidden">
         {session.pings.map((ping) => (

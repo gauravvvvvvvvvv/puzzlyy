@@ -61,6 +61,9 @@ export function PuzzleRoom({
 
   const [ghost, setGhost] = useState(!puzzle.settings.blindMode);
   const [grid, setGrid] = useState(false);
+  const [edgeFocus, setEdgeFocus] = useState(false);
+  const [milestone, setMilestone] = useState<number | null>(null);
+  const celebrated = useRef(0);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [boardError, setBoardError] = useState<string | null>(null);
   const [hintBusy, setHintBusy] = useState(false);
@@ -102,6 +105,16 @@ export function PuzzleRoom({
   }, [complete]);
 
   const elapsed = engine.elapsedMs(now);
+
+  // Co-op milestones are a small celebration, not a modal that steals input.
+  useEffect(() => {
+    const mark = Math.floor(stats.progress * 4);
+    if (mark < 1 || mark > 3 || mark <= celebrated.current) return;
+    celebrated.current = mark;
+    setMilestone(mark * 25);
+    const timer = window.setTimeout(() => setMilestone(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [stats.progress]);
 
   /* --- actions ------------------------------------------------------------ */
 
@@ -325,6 +338,7 @@ export function PuzzleRoom({
           reducedMotion={reducedMotion}
           ghost={ghost}
           grid={grid}
+          edgeFocus={edgeFocus}
           frozen={complete}
           pingArmed={pingArmed}
           onPlacePing={placePing}
@@ -333,6 +347,11 @@ export function PuzzleRoom({
         />
 
         <ConnectionBanner status={connection} />
+        {milestone !== null && (
+          <div role="status" className="pointer-events-none absolute left-1/2 top-16 z-30 -translate-x-1/2 rounded-full bg-[var(--accent-soft)] px-5 py-2 text-sm font-semibold shadow-lg">
+            {milestone}% together! Keep going
+          </div>
+        )}
 
         <div className="panel absolute top-3 left-3 hidden w-52 p-2 lg:block">
           <PresenceRail players={players} myId={myId} variant="board" />
@@ -385,6 +404,8 @@ export function PuzzleRoom({
           onGhost={setGhost}
           grid={grid}
           onGrid={setGrid}
+          edgeFocus={edgeFocus}
+          onEdgeFocus={setEdgeFocus}
           sound={sound}
           onSound={toggleSound}
           onLeave={onLeave}
