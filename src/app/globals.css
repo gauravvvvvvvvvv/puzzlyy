@@ -459,3 +459,18 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+@keyframes puzzly-emoji-shower {
+  0% { transform: translate3d(0,-10vh,0) rotate(-20deg) scale(.7); opacity: 0; }
+  12% { opacity: 1; }
+  100% { transform: translate3d(35px,115vh,0) rotate(55deg) scale(1.2); opacity: 0; }
+}
+@keyframes puzzly-tug-shake {
+  0%,100% { transform: translate3d(0,0,0); }
+  25% { transform: translate3d(.8px,-.5px,0); }
+  50% { transform: translate3d(-.8px,.5px,0); }
+  75% { transform: translate3d(.5px,.5px,0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .puzzly-tug-board { animation: none !important; }
+}

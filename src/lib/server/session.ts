@@ -71,6 +71,7 @@ const LOCK_TTL_MS = 20_000;
 const PRESENCE_TTL_MS = 45_000;
 /** `alive` only writes when the stored timestamp is at least this stale. */
 const PRESENCE_WRITE_MS = 12_000;
+const IDLE_KICK_MS = 60 * 60 * 1000;
 /** How many times to re-apply a batch after losing a compare-and-swap race. */
 const CAS_ATTEMPTS = 6;
 
@@ -324,6 +325,7 @@ export async function joinRoom(code: string, input: JoinInput): Promise<Outcome<
         seat.name = sanitizeName(input.name ?? seat.name);
         seat.avatar = sanitizeAvatar(input.avatar ?? seat.avatar);
         seat.lastSeenAt = now;
+        seat.activeAt = now;
         // Persist the same sequence we publish. Otherwise reconnecting a seat
         // consumes an unrecorded number and causes a later false gap.
         seq += 1;
@@ -365,6 +367,7 @@ export async function joinRoom(code: string, input: JoinInput): Promise<Outcome<
       ready: false,
       joinedAt: now,
       lastSeenAt: now,
+      activeAt: now,
       connections: 0,
       token: createToken(),
       budget: 0,
@@ -478,8 +481,14 @@ export async function applyClientEvents(
 
     expireLocks(ctx);
     expireTugs(ctx);
+    expireInactiveSeats(ctx);
 
     for (const event of events) {
+      if (event.t !== 'alive' && event.t !== 'resync' && event.t !== 'cursor' &&
+          event.t !== 'move' && event.t !== 'typing' && event.t !== 'rtc') {
+        seat.activeAt = now;
+        ctx.dirty = true;
+      }
       switch (event.t) {
         case 'cursor':
           onCursor(ctx, event);
@@ -678,6 +687,8 @@ function onRtc(ctx: Ctx, event: Extract<ClientEvent, { t: 'rtc' }>): void {
 }
 
 function onMedia(ctx: Ctx, event: Extract<ClientEvent, { t: 'media' }>): void {
+  ctx.seat.mediaAt = event.audio || event.video ? ctx.now : 0;
+  ctx.dirty = true;
   emitLoose(ctx, { t: 'media', playerId: ctx.seat.id, audio: event.audio, video: event.video });
 }
 
@@ -694,8 +705,11 @@ function resolveTug(ctx: Ctx, contest: TugState): void {
   delete ctx.record.tugs?.[contest.g];
   const actual = ctx.engine.lockHolder(contest.g);
   let winner = contest.defender;
-  // Defender wins draws, and an inactive tug can never change piece ownership.
-  if (actual === contest.defender && contest.challengerScore > contest.defenderScore + 8) {
+  // Effort biases the odds but never guarantees a win. The server draws once
+  // when the contest resolves so all clients see the same owner.
+  const total = Math.max(1, contest.defenderScore + contest.challengerScore);
+  const challengerChance = Math.min(.8, Math.max(.2, contest.challengerScore / total));
+  if (actual === contest.defender && Math.random() < challengerChance) {
     ctx.engine.release(contest.g, contest.defender);
     const z = ctx.engine.grab(contest.g, contest.challenger);
     if (z !== null) {
@@ -994,7 +1008,39 @@ function onUndo(ctx: Ctx, direction: 'undo' | 'redo'): void {
 
 /* --- housekeeping --------------------------------------------------------- */
 
+function expireInactiveSeats(ctx: Ctx): void {
+  const expired = ctx.record.players.filter(p =>
+    p.id !== ctx.seat.id &&
+    ctx.now - (p.activeAt ?? p.lastSeenAt) >= IDLE_KICK_MS &&
+    ctx.now - (p.mediaAt ?? 0) >= PRESENCE_TTL_MS);
+  if (!expired.length) return;
+  for (const seat of expired) {
+    for (const groupId of ctx.engine.releaseAll(seat.id)) {
+      delete ctx.record.locksAt[groupId];
+      emit(ctx, { t: 'release', playerId: seat.id, g: groupId });
+    }
+    ctx.record.players = ctx.record.players.filter(p => p.id !== seat.id);
+    emit(ctx, { t: 'leave', playerId: seat.id });
+  }
+  if (!ctx.record.players.some(p => p.isHost) && ctx.record.players.length) {
+    const next = [...ctx.record.players].sort((a, b) => a.joinedAt - b.joinedAt)[0];
+    next.isHost = true;
+    ctx.record.room.hostId = next.id;
+  }
+  emit(ctx, { t: 'presence', players: publicRoster(ctx.record, ctx.now) });
+  save(ctx);
+}
+
+
+
 function onAlive(ctx: Ctx, event: Extract<ClientEvent, { t: 'alive' }>): void {
+  // An open but untouched tab is not activity. Remove even the heartbeat
+  // sender once their one-hour window expires, unless a call is still live.
+  if (ctx.now - (ctx.seat.activeAt ?? ctx.seat.lastSeenAt) >= IDLE_KICK_MS &&
+      !event.media && ctx.now - (ctx.seat.mediaAt ?? 0) >= PRESENCE_TTL_MS) {
+    onBye(ctx);
+    return;
+  }
   // Refresh locks this player says they are still holding, so a slow, careful
   // drag is never stolen out from under them.
   if (Array.isArray(event.holding)) {
@@ -1005,6 +1051,7 @@ function onAlive(ctx: Ctx, event: Extract<ClientEvent, { t: 'alive' }>): void {
       ctx.dirty = true;
     }
   }
+  if (event.media) ctx.seat.mediaAt = ctx.now;
   // Only write for the timestamp once it has actually gone stale.
   if (ctx.now - ctx.seat.lastSeenAt >= PRESENCE_WRITE_MS) {
     ctx.seat.lastSeenAt = ctx.now;

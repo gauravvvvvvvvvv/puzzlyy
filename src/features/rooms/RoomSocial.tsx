@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { RoomSession } from '@/hooks/useRoomSession';
+import { Icon } from '@/components/ui/Icon';
 
 type Mode = { audio: boolean; video: boolean };
 type Remote = { playerId: string; stream: MediaStream };
@@ -19,7 +20,7 @@ function MediaTile({ stream, label, muted = false }: {
     <div className="relative min-h-24 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-inset)] shadow-sm">
       {stream.getVideoTracks().length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center text-center text-sm font-medium text-[var(--fg-muted)]">
-          <span className="rounded-full bg-[var(--accent-soft)] px-4 py-2">🎙 {label}</span>
+          <span className="rounded-full bg-[var(--accent-soft)] px-4 py-2">{label}</span>
         </div>
       )}
       <video ref={video} autoPlay playsInline muted={muted}
@@ -37,7 +38,7 @@ function MediaTile({ stream, label, muted = false }: {
  * and puzzle changes. Voice/video permissions are requested only on click.
  * WebRTC carries the media; authenticated room events carry signaling.
  */
-export function RoomSocial({ session, code }: { session: RoomSession; code: string }) {
+export function RoomSocial({ session, code, onLeave }: { session: RoomSession; code: string; onLeave: () => void }) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [mode, setMode] = useState<Mode>(OFF);
@@ -300,17 +301,18 @@ export function RoomSocial({ session, code }: { session: RoomSession; code: stri
           <button type="button" onClick={() => setOpen(false)} className="rounded p-2 lg:hidden">Close</button>
         </header>
         <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] p-3">
-          <button type="button" disabled={busy} aria-pressed={mode.audio}
+          <button type="button" disabled={busy} aria-label={mode.audio ? "Mute microphone" : "Enable microphone"} title={mode.audio ? "Mute microphone" : "Enable microphone"} aria-pressed={mode.audio}
             onClick={() => void changeMode({ ...mode, audio: !mode.audio })}
             className={'min-h-11 flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ' + (mode.audio ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--fg)] ring-2 ring-[var(--accent)]/40' : 'border-[var(--line)] bg-[var(--surface-inset)] hover:border-[var(--accent)]')}>
-            {busy ? 'Connecting…' : mode.audio ? '● Voice on' : '🎙 Join voice'}
+            <Icon name={mode.audio ? 'mic-off' : 'mic'} size={22} />
           </button>
-          <button type="button" disabled={busy} aria-pressed={mode.video}
+          <button type="button" disabled={busy} aria-label={mode.video ? "Stop camera" : "Enable camera"} title={mode.video ? "Stop camera" : "Enable camera"} aria-pressed={mode.video}
             onClick={() => void changeMode({ ...mode, video: !mode.video })}
             className={'min-h-11 flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ' + (mode.video ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--fg)] ring-2 ring-[var(--accent)]/40' : 'border-[var(--line)] bg-[var(--surface-inset)] hover:border-[var(--accent)]')}>
-            {busy ? 'Connecting…' : mode.video ? '● Camera on' : '📷 Start video'}
+            <Icon name={mode.video ? 'video-off' : 'video'} size={22} />
           </button>
-          {hasMedia && <span role="status" className="text-2xs text-[var(--fg-subtle)]">Media connected</span>}
+          {busy && <span role="status" className="text-2xs text-[var(--fg-subtle)]">Connecting…</span>}
+          {hasMedia && <span role="status" className="text-2xs text-[var(--fg-subtle)]">Call on</span>}
           {(videoCount > 0 || hasMedia) && <button type="button" onClick={() => setCallExpanded(value => !value)} className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs transition hover:bg-[var(--surface-inset)] active:scale-95">{callExpanded ? 'Compact view' : 'Expand videos'}</button>}
         </div>
         {error && <p role="alert" className="px-3 pt-2 text-xs text-red-500">{error}</p>}
@@ -336,6 +338,7 @@ export function RoomSocial({ session, code }: { session: RoomSession; code: stri
               (entry.playerId === session.myId ? 'ml-auto bg-[var(--accent-soft)]' : 'bg-[var(--surface-inset)]')}>
             <p className="mb-1 font-semibold text-[var(--fg)]">{entry.name}</p>
             <p className="break-words whitespace-pre-wrap text-[var(--fg-muted)]">{entry.text}</p>
+            <time dateTime={new Date(entry.createdAt).toISOString()} className="mt-1 block text-[10px] text-[var(--fg-subtle)]" title={new Date(entry.createdAt).toLocaleString()}>{new Date(entry.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</time>
           </div>)}
         </div>
         {typing && <p className="px-3 pb-1 text-2xs italic text-[var(--fg-muted)]">{typing} is typing…</p>}
@@ -353,6 +356,7 @@ export function RoomSocial({ session, code }: { session: RoomSession; code: stri
             </ul>
           </details>
         )}
+        <button type="button" onClick={onLeave} className="mx-3 mb-2 flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--line)] text-sm text-[var(--color-danger-400)] transition hover:bg-[var(--surface-inset)] active:scale-95"><Icon name="arrow-left" size={18} />Leave room</button>
         <form onSubmit={sendMessage} className="flex gap-2 border-t border-[var(--line)] p-3">
           <input value={message} onChange={e => {
             setMessage(e.target.value);
