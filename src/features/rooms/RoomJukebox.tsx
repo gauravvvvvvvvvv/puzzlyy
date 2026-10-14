@@ -91,7 +91,6 @@ export function RoomJukebox({session}: {session: RoomSession}) {
     (music.playing ? (Date.now() - music.updatedAt) / 1000 : 0));
   const isYoutube = track?.provider === 'youtube';
   const enabled = listening && isYoutube;
-  const mediaId = track?.mediaId ?? '';
 
   useEffect(() => {
     if (!enabled || !playerHost.current) return;
@@ -99,7 +98,7 @@ export function RoomJukebox({session}: {session: RoomSession}) {
     void youtubeAPI().then(YT => {
       if (cancelled || !playerHost.current || player.current) return;
       player.current = new YT.Player(playerHost.current, {
-        height: '96', width: '160',
+        height: '200', width: '100%',
         playerVars: {playsinline:1, controls:1, rel:0, origin:window.location.origin},
         events: {onReady: () => {
           if (!cancelled) { setError(''); setPlayerReady(n => n + 1); }
@@ -182,9 +181,10 @@ export function RoomJukebox({session}: {session: RoomSession}) {
             className="min-h-10 rounded-lg border border-[var(--line)] px-3 text-xs transition hover:bg-[var(--surface-2)] active:scale-95">
             {listening ? 'Stop listening' : 'Listen together'}
           </button>
-          {enabled && <div className="min-h-24" ref={playerHost} />}
+          {enabled && <div className="min-h-48 w-full overflow-hidden rounded-lg bg-black [&_iframe]:w-full" ref={playerHost} />}
+          {enabled && <a className="block break-words text-xs underline underline-offset-2 text-[var(--fg-muted)]" target="_blank" rel="noopener noreferrer" href={track.mediaId.startsWith('list:') ? `https://www.youtube.com/playlist?list=${encodeURIComponent(track.mediaId.slice(5))}` : `https://www.youtube.com/watch?v=${encodeURIComponent(track.mediaId)}`}>Video blocked or unavailable? Open directly on YouTube</a>}
           {listening && spotify && <iframe title="Spotify playlist" loading="lazy" allow="autoplay; encrypted-media; fullscreen"
-            className="w-full rounded-lg" height="152"
+            className="w-full min-w-0 rounded-lg" height="152"
             src={'https://open.spotify.com/embed/'+spotify[0]+'/'+spotify[1]} />}
           {session.isHost && <div className="flex flex-wrap gap-2">
             <button className="rounded-lg border px-3 py-2 text-xs" onClick={()=>emit(music.playing?'pause':'play')}>
