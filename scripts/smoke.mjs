@@ -51,6 +51,9 @@ console.log(`        store=${health.body?.storage?.rooms} realtime=${health.body
 const images = await call('/api/images?source=original&perPage=3');
 const asset = images.body?.items?.[0] ?? null;
 ok('originals available with no API keys', asset !== null, JSON.stringify(images.body).slice(0, 200));
+const noMatches = await call('/api/images?source=original&q=zzzznope');
+ok('no-match originals search returns an empty grid', noMatches.status === 200 && noMatches.body?.items?.length === 0);
+
 if (!asset) {
   process.exitCode = 1;
   throw new Error('no originals returned — cannot continue');
