@@ -1024,7 +1024,7 @@ function readTheme(canvas?: HTMLCanvasElement | null): RendererTheme {
     boardBg: pick('--board-bg', '#17161a'),
     slot: pick('--board-slot', 'rgba(255,255,255,0.035)'),
     slotLine: pick('--line', 'rgba(255,255,255,0.09)'),
-    accent: pick('--accent', '#ff8a5b'),
+    accent: pick('--world-snap', pick('--accent', '#ff8a5b')),
     hint: pick('--color-butter-400', '#ffd166'),
   };
 }
