@@ -501,3 +501,50 @@
   0%,100% {opacity:.45; scale:.8; filter:drop-shadow(0 0 2px #f5bd4f)}
   50% {opacity:1; scale:1.2; filter:drop-shadow(0 0 8px #ffd074)}
 }
+
+
+/* Shared room themes are visibly distinct and retain light-mode legibility. */
+[data-room-theme="cozy"] {
+  --board-bg: #32242a;
+  --board-slot: rgba(255, 225, 191, .11);
+}
+[data-room-theme="arcade"] {
+  --board-bg: #21123b;
+  --board-slot: rgba(239, 126, 255, .16);
+  --accent: #f77764;
+  --accent-soft: rgba(247, 119, 100, .17);
+}
+[data-room-theme="space"] {
+  --board-bg: #0b1838;
+  --board-slot: rgba(136, 188, 255, .16);
+  --accent: #83a8f8;
+  --accent-soft: rgba(131, 168, 248, .18);
+}
+[data-room-theme="beach"] {
+  --board-bg: #174b58;
+  --board-slot: rgba(255, 225, 153, .19);
+  --accent: #ffb66e;
+  --accent-soft: rgba(255, 182, 110, .2);
+}
+:root[data-theme="light"] [data-room-theme="cozy"] {
+  --board-bg: #ead7c8;
+  --board-slot: rgba(93, 52, 48, .15);
+}
+:root[data-theme="light"] [data-room-theme="arcade"] {
+  --board-bg: #e2d4fc;
+  --board-slot: rgba(88, 36, 163, .19);
+  --accent: #8b46c1;
+  --accent-soft: rgba(139, 70, 193, .12);
+}
+:root[data-theme="light"] [data-room-theme="space"] {
+  --board-bg: #cfdeef;
+  --board-slot: rgba(33, 64, 117, .18);
+  --accent: #385ba8;
+  --accent-soft: rgba(56, 91, 168, .12);
+}
+:root[data-theme="light"] [data-room-theme="beach"] {
+  --board-bg: #d6eee8;
+  --board-slot: rgba(0, 97, 122, .19);
+  --accent: #006d82;
+  --accent-soft: rgba(0, 109, 130, .13);
+}

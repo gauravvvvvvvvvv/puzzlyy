@@ -774,7 +774,18 @@ function onConnectPieces(ctx: Ctx, connections: number, pieceId: number): void {
 
 /** Chat is tied to the room, not to any individual puzzle round. */
 function onChat(ctx: Ctx, raw: string): void {
-  const text = raw.replace(/\s+/g, ' ').trim().slice(0, 500);
+  // Five messages per ten seconds per seat. The limiter lives in the durable
+  // seat record, so serverless instances cannot bypass it on each request.
+  if (ctx.now - (ctx.seat.chatWindowAt ?? 0) > 10_000) {
+    ctx.seat.chatWindowAt = ctx.now;
+    ctx.seat.chatWindowCount = 0;
+  }
+  if ((ctx.seat.chatWindowCount ?? 0) >= 5) {
+    emitTo(ctx, ctx.seat.id, { t: 'reject', reason: 'Chat is moving too fast. Try again in a few seconds.' });
+    return;
+  }
+  ctx.seat.chatWindowCount = (ctx.seat.chatWindowCount ?? 0) + 1;
+  const text = raw.replace(/\r\n?/g, '\n').replace(/[\t ]+/g, ' ').replace(/\n{4,}/g, '\n\n\n').trim().slice(0, 500);
   if (!text) return;
   const message = {
     id: createId('msg', 12),

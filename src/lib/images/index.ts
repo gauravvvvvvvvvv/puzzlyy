@@ -99,7 +99,7 @@ class OriginalsProvider implements ImageProvider {
     }
     // A category with no Originals of its own should still show something
     // rather than an empty grid.
-    if (!matches.length && (category || words.length)) matches = [...ORIGINALS];
+    if (!matches.length && category && !words.length) matches = [...ORIGINALS];
 
     const start = (page - 1) * perPage;
     return {

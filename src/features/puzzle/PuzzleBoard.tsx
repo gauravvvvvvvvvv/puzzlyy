@@ -110,6 +110,7 @@ export function PuzzleBoard({
   tugsRef.current = session.tugs;
   const tugSentAtRef = useRef(0);
   const lastHoverHitAt = useRef(0);
+  const keyboardGroupRef = useRef<number | null>(null);
 
   /** Read inside handlers and the rAF loop, where props would be stale. */
   const trailAtRef = useRef(new Map<string, number>());
@@ -747,6 +748,89 @@ export function PuzzleBoard({
     [myId, refreshStats, rendererRef, send],
   );
 
+  const rotateHeld = useCallback((dir: 1 | -1) => {
+    const gesture = gestureRef.current;
+    if (gesture.kind !== 'drag') return;
+    engineRef.current.rotatePiece(gesture.g, dir, pointerRef.current, myId);
+    send({ t: 'rotate', g: gesture.g, dir });
+    onActedRef.current();
+    rendererRef.current?.invalidate();
+  }, [myId, pointerRef, rendererRef, send]);
+
+  const onBoardKeyDown = useCallback((event: React.KeyboardEvent<HTMLCanvasElement>) => {
+    if (frozenRef.current || event.metaKey || event.ctrlKey || event.altKey) return;
+    const current = engineRef.current;
+    const renderer = rendererRef.current;
+    if (!renderer) return;
+    const selected = keyboardGroupRef.current;
+    const finish = () => {
+      const id = keyboardGroupRef.current;
+      if (id === null) return;
+      const group = current.getGroup(id);
+      if (group && current.lockHolder(id) === myId) {
+        send({ t: 'drop', g: id, ox: group.ox, oy: group.oy });
+        current.drop(id, group.ox, group.oy, myId, Date.now());
+        current.release(id, myId);
+        onActedRef.current();
+        refreshStats();
+      }
+      keyboardGroupRef.current = null;
+      renderer.draggingGroup = null;
+      renderer.snapPreview = null;
+      renderer.invalidate();
+    };
+
+    if (event.key.toLowerCase() === 'n') {
+      event.preventDefault();
+      const groups = current.groupList.map(group => group.id).sort((a, b) => a - b);
+      if (!groups.length) return;
+      const start = selected === null ? -1 : groups.indexOf(selected);
+      finish();
+      for (let step = 1; step <= groups.length; step++) {
+        const id = groups[(start + step) % groups.length];
+        if (current.lockHolder(id) && current.lockHolder(id) !== myId) continue;
+        if (current.grab(id, myId) === null) continue;
+        keyboardGroupRef.current = id;
+        const group = current.getGroup(id);
+        if (group && group.pieces.length) { const point = current.pieceWorld(group.pieces[0]); renderer.lookAt(point.x, point.y); }
+        renderer.draggingGroup = id;
+        send({ t: 'grab', g: id });
+        renderer.invalidate();
+        break;
+      }
+      return;
+    }
+    if (selected === null) return;
+    if (event.key === 'Enter' || event.key === 'Escape') {
+      event.preventDefault();
+      finish();
+      return;
+    }
+    if (event.key === 'q' || event.key === 'Q' || event.key === 'e' || event.key === 'E') {
+      if (!current.puzzle.settings.rotation) return;
+      event.preventDefault();
+      const dir = event.key.toLowerCase() === 'e' ? 1 : -1;
+      current.rotatePiece(selected, dir, undefined, myId);
+      send({ t: 'rotate', g: selected, dir });
+      renderer.invalidate();
+      return;
+    }
+    const directions: Record<string, [number, number]> = {
+      ArrowUp: [0, -1], ArrowDown: [0, 1],
+      ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+    };
+    const direction = directions[event.key];
+    if (!direction) return;
+    event.preventDefault();
+    const group = current.getGroup(selected);
+    if (!group || current.lockHolder(selected) !== myId) return;
+    const pace = event.shiftKey ? 40 : 12;
+    current.movePiece(selected, group.ox + direction[0] * pace, group.oy + direction[1] * pace, myId);
+    send({ t: 'move', g: selected, ox: group.ox, oy: group.oy });
+    renderer.snapPreview = null;
+    renderer.invalidate();
+  }, [myId, refreshStats, rendererRef, send]);
+
   /* --- rotation ---------------------------------------------------------- */
 
   useEffect(() => {
@@ -781,7 +865,23 @@ export function PuzzleBoard({
 
   return (
     <div className="relative size-full overflow-hidden" style={{ background: 'var(--board-bg)' }}>
+      {engine.puzzle.settings.rotation && (
+        <div className="pointer-events-auto absolute bottom-24 left-3 z-30 flex gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)]/95 p-1.5 shadow-lg sm:bottom-20"
+          role="group" aria-label="Rotate the piece you are holding">
+          <button type="button" onClick={() => rotateHeld(-1)} aria-label="Rotate held piece left"
+            className="min-h-11 min-w-11 rounded-lg border border-[var(--line)] text-sm font-semibold hover:bg-[var(--surface-inset)] active:scale-95">↶</button>
+          <button type="button" onClick={() => rotateHeld(1)} aria-label="Rotate held piece right"
+            className="min-h-11 min-w-11 rounded-lg border border-[var(--line)] text-sm font-semibold hover:bg-[var(--surface-inset)] active:scale-95">↷</button>
+          <span className="hidden self-center px-1 text-xs text-[var(--fg-muted)] sm:inline">Hold a piece · Q/E</span>
+        </div>
+      )}
+      <p id="puzzly-board-keyboard-help" className="sr-only">Keyboard puzzle controls: Tab to focus this board, press N to select the next piece, arrow keys to move it, Shift plus arrow for large steps, Enter to place, or Escape to release. Q and E rotate a selected piece when rotation is enabled.</p>
       <canvas
+        tabIndex={0}
+        role="application"
+        aria-label="Interactive puzzle board"
+        aria-describedby="puzzly-board-keyboard-help"
+        onKeyDown={onBoardKeyDown}
         ref={canvasRef}
         // `touch-none` is what makes dragging possible on a phone: without it the
         // browser claims the gesture for scrolling (spec §24).

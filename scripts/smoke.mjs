@@ -51,6 +51,9 @@ console.log(`        store=${health.body?.storage?.rooms} realtime=${health.body
 const images = await call('/api/images?source=original&perPage=3');
 const asset = images.body?.items?.[0] ?? null;
 ok('originals available with no API keys', asset !== null, JSON.stringify(images.body).slice(0, 200));
+const noMatches = await call('/api/images?source=original&q=zzzznope');
+ok('no-match originals search returns an empty grid', noMatches.status === 200 && noMatches.body?.items?.length === 0);
+
 if (!asset) {
   process.exitCode = 1;
   throw new Error('no originals returned — cannot continue');
@@ -236,6 +239,19 @@ ok(
     Math.round(redoneU.oy) === Math.round(movedU.oy),
   `wanted ${movedU?.ox},${movedU?.oy} got ${redoneU?.ox},${redoneU?.oy}`,
 );
+
+// A browser refresh resumes with seat credentials and must restore both
+// piece positions and the undo journal, not just chat and elapsed time.
+const resumedAfterMove = await call(`/api/rooms/${code}/join`, {
+  method: 'POST',
+  body: JSON.stringify({ name: 'Ada', avatar: '🦊', playerId: A.id, token: A.token }),
+});
+const persistedGroup = resumedAfterMove.body?.session?.groups?.find(g => g.id === uid);
+ok('rejoin restores moved piece positions',
+  persistedGroup !== undefined && movedU !== undefined &&
+  persistedGroup.ox === movedU.ox && persistedGroup.oy === movedU.oy);
+ok('rejoin restores the undo journal',
+  (resumedAfterMove.body?.session?.journal?.undo?.[A.id]?.length ?? 0) > 0);
 
 // The journal is per-player, so B pressing undo takes back B's own last move —
 // never A's. Without that, either player could quietly rearrange the other's work.

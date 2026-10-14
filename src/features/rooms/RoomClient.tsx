@@ -100,6 +100,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
   /* --- actions ------------------------------------------------------------- */
 
   const leave = useCallback(() => {
+    if (!window.confirm(isHost ? 'Leave this room? Host controls will transfer to another player.' : 'Leave this room? You can rejoin with an invite link.')) return;
     send({ t: 'bye' });
     flush();
     // Leaving is a decision, not a disconnect: the seat is given up so the room
@@ -107,7 +108,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
     clearSeat(code);
     clearLastRoom();
     router.push('/');
-  }, [code, flush, router, send]);
+  }, [code, flush, isHost, router, send]);
 
   const ready = useCallback((value: boolean) => send({ t: 'ready', ready: value }), [send]);
   const start = useCallback(() => {

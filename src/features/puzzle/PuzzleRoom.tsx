@@ -26,6 +26,7 @@ import { PuzzleBoard } from '@/features/puzzle/PuzzleBoard';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import type { RoomSession } from '@/hooks/useRoomSession';
 import { formatDuration } from '@/lib/format';
+import { readJson, writeJson } from '@/lib/storage/local';
 import type { PuzzleEngine } from '@/lib/puzzle/engine';
 import type { PuzzleRenderer } from '@/lib/puzzle/renderer';
 import { setSoundEnabled, soundEnabled } from '@/lib/puzzle/sound';
@@ -61,6 +62,19 @@ export function PuzzleRoom({
   const [ghost, setGhost] = useState(!puzzle.settings.blindMode);
   const [grid, setGrid] = useState(false);
   const [edgeFocus, setEdgeFocus] = useState(false);
+  useEffect(() => {
+    setGrid(readJson<boolean>('board:grid', false));
+    setEdgeFocus(readJson<boolean>('board:edges', false));
+  }, []);
+  const updateGrid = useCallback((enabled: boolean) => {
+    setGrid(enabled);
+    writeJson('board:grid', enabled);
+  }, []);
+  const updateEdges = useCallback((enabled: boolean) => {
+    setEdgeFocus(enabled);
+    writeJson('board:edges', enabled);
+  }, []);
+
   const [milestone, setMilestone] = useState<number | null>(null);
   const celebrated = useRef(0);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -279,15 +293,16 @@ export function PuzzleRoom({
 
   /* --- undo availability -------------------------------------------------- */
 
-  useEffect(
-    () =>
-      subscribe(() => {
-        // Cheap and honest: the local journal is a good enough proxy for "there
-        // is something to take back", and the server corrects us if not.
-        if (engine.canUndo(myId)) setActed(true);
-      }),
-    [engine, myId, subscribe],
-  );
+  useEffect(() => {
+    // A rejoining player may already have an authoritative undo journal.
+    // Initialize controls from the restored engine, not only from future events.
+    setActed(engine.canUndo(myId));
+    setRedoDepth(engine.canRedo(myId) ? 1 : 0);
+    return subscribe(() => {
+      setActed(engine.canUndo(myId));
+      setRedoDepth(engine.canRedo(myId) ? 1 : 0);
+    });
+  }, [engine, myId, subscribe]);
 
   const roster = useMemo(() => players.filter(p=>!p.spectator)
     .sort((a,b)=>a.joinedAt-b.joinedAt), [players]);
@@ -444,9 +459,9 @@ export function PuzzleRoom({
           ghost={ghost}
           onGhost={setGhost}
           grid={grid}
-          onGrid={setGrid}
+          onGrid={updateGrid}
           edgeFocus={edgeFocus}
-          onEdgeFocus={setEdgeFocus}
+          onEdgeFocus={updateEdges}
           sound={sound}
           onSound={toggleSound}
           onLeave={onLeave}
