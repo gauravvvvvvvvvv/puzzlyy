@@ -42,9 +42,6 @@ export interface PuzzleRoomProps {
   onLeave: () => void;
 }
 
-/** Long enough that the button cannot be machine-gunned, short enough to feel free. */
-const HINT_COOLDOWN_MS = 250;
-
 export function PuzzleRoom({
   session,
   engine,
@@ -56,8 +53,10 @@ export function PuzzleRoom({
 }: PuzzleRoomProps) {
   const reducedMotion = useReducedMotion();
   const rendererRef = useRef<PuzzleRenderer | null>(null);
+  const fullscreenRef = useRef<HTMLDivElement | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const pointerRef = useRef({ x: 0, y: 0 });
-  const hintAtRef = useRef(0);
+  const hintLevelRef = useRef<{ at: number; level: number }>({ at: 0, level: 0 });
 
   const [ghost, setGhost] = useState(!puzzle.settings.blindMode);
   const [grid, setGrid] = useState(false);
@@ -66,7 +65,7 @@ export function PuzzleRoom({
   const celebrated = useRef(0);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [boardError, setBoardError] = useState<string | null>(null);
-  const [hintBusy, setHintBusy] = useState(false);
+
   const [now, setNow] = useState(() => Date.now());
 
   // Undo is offered once you have done something undoable, and taken away again
@@ -95,6 +94,32 @@ export function PuzzleRoom({
   const complete = session.phase === 'complete' || stats.complete;
 
   useEffect(() => setSound(soundEnabled()), []);
+
+  // Request fullscreen on the canvas container, never the whole room shell.
+  // Browser fullscreen displays only this element and its children.
+  const toggleFullscreen = useCallback(async () => {
+    const board = fullscreenRef.current;
+    if (!board) return;
+    if (document.fullscreenElement === board) {
+      await document.exitFullscreen();
+      return;
+    }
+    try {
+      await board.requestFullscreen();
+    } catch {
+      // Unsupported or denied: preserve the normal game layout.
+      setBoardError('Fullscreen is not available in this browser.');
+    }
+  }, []);
+
+  useEffect(() => {
+    const changed = () => {
+      setFullscreen(document.fullscreenElement === fullscreenRef.current);
+      requestAnimationFrame(() => rendererRef.current?.resize());
+    };
+    document.addEventListener('fullscreenchange', changed);
+    return () => document.removeEventListener('fullscreenchange', changed);
+  }, []);
 
   /* --- the clock ---------------------------------------------------------- */
 
@@ -148,22 +173,20 @@ export function PuzzleRoom({
   );
 
   const hint = useCallback(() => {
-    const since = Date.now() - hintAtRef.current;
-    if (since < HINT_COOLDOWN_MS) return;
-    hintAtRef.current = Date.now();
-    setHintBusy(true);
-    window.setTimeout(() => setHintBusy(false), HINT_COOLDOWN_MS);
-
-    // Progressive: each press within a hint's lifetime says more, up to placing
-    // the piece for you (spec §17). Once the hint fades, the next press starts
-    // gently again — and only *my* hints escalate, or my friend asking for one
-    // would silently skip me past the gentle levels.
-    const live = session.hint;
-    const mine = live && live.playerId === myId ? live.level : 0;
-    const level = Math.min(4, mine + 1) as 1 | 2 | 3 | 4;
+    // No artificial timer or disabled-button interval: feedback is painted
+    // immediately and the transport flushes the authoritative action.
+    // Track the level in a ref so rapid successive taps never read stale
+    // React state and accidentally request the same level twice.
+    const now = Date.now();
+    const previous = hintLevelRef.current;
+    const serverLevel = session.hint?.playerId === myId ? session.hint.level : 0;
+    const activeLevel = now - previous.at < 9000 ? previous.level : 0;
+    const level = Math.min(4, Math.max(serverLevel, activeLevel) + 1) as 1 | 2 | 3 | 4;
+    hintLevelRef.current = { at: now, level: level === 4 ? 0 : level };
+    session.previewHint(level);
     send({ t: 'hint', level });
     session.flush();
-  }, [myId, send, session.flush, session.hint]);
+  }, [myId, send, session.flush, session.hint, session.previewHint]);
 
   const undo = useCallback(() => {
     send({ t: 'undo' });
@@ -321,13 +344,17 @@ export function PuzzleRoom({
         </ul>
 
         <ConnectionBadge status={connection} className="shrink-0" />
+        <IconButton label="Puzzle only fullscreen" onClick={() => void toggleFullscreen()} className="shrink-0">
+          <Icon name="maximize" size={19} />
+        </IconButton>
 
 
       </header>
 
       {/* ---- board ------------------------------------------------------- */}
       <div className="relative min-h-0 flex-1">
-        <PuzzleBoard
+        <div ref={fullscreenRef} className="relative size-full overflow-hidden bg-[var(--bg-deep)]">
+          <PuzzleBoard
           session={session}
           engine={engine}
           atlas={atlas}
@@ -344,6 +371,12 @@ export function PuzzleRoom({
           onError={setBoardError}
           onActed={noteAction}
         />
+        {fullscreen && <button type="button" onClick={() => void toggleFullscreen()}
+          className="absolute right-3 top-3 z-50 grid size-11 place-items-center rounded-xl border border-[var(--line)] bg-[var(--surface)]/90 text-[var(--fg)] shadow-md transition hover:bg-[var(--surface-inset)] active:scale-95"
+          aria-label="Exit puzzle fullscreen" title="Exit fullscreen">
+          <Icon name="minimize" size={20} />
+        </button>}
+        </div>
 
         <ConnectionBanner status={connection} />
         {milestone !== null && (
@@ -391,7 +424,7 @@ export function PuzzleRoom({
           onPreview={() => setPreviewOpen((open) => !open)}
           onHint={hint}
           hintsUsed={stats.hintsUsed}
-          hintBusy={hintBusy}
+          hintBusy={false}
           canUndo={acted}
           canRedo={redoDepth > 0}
           onUndo={undo}

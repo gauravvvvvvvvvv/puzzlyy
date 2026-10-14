@@ -60,10 +60,15 @@ export type IconName =
   | 'mic'
   | 'mic-off'
   | 'video'
-  | 'video-off';
+  | 'video-off'
+  | 'maximize'
+  | 'minimize';
 
 /** Paths are drawn on a 24×24 grid with a 1.7 stroke, so weights match. */
 const PATHS: Record<IconName, string> = {
+  maximize: 'M8 3H3v5M3 3l7 7M16 3h5v5M21 3l-7 7M3 16v5h5M3 21l7-7M21 16v5h-5M21 21l-7-7',
+  minimize: 'M3 9h6V3M9 9 3 3M21 9h-6V3M15 9l6-6M3 15h6v6M9 15l-6 6M21 15h-6v6M15 15l6 6',
+
   mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM5 11a7 7 0 0 0 14 0M12 18v3M8 21h8',
   'mic-off': 'M3 3l18 18M9 9v3a3 3 0 0 0 5.1 2.1M15 9V6a3 3 0 0 0-5.8-1M5 11a7 7 0 0 0 12 5M19 11a7 7 0 0 1-.4 2.4M12 18v3M8 21h8',
   video: 'M4 6h12a2 2 0 0 1 2 2v2l4-3v10l-4-3v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z',

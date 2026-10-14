@@ -125,6 +125,7 @@ export interface RoomSession {
   pings: PingMark[];
   hint: HintNotice | null;
   clearHint: () => void;
+  previewHint: (level: 1 | 2 | 3 | 4) => void;
   chat: ChatMessage[];
   tugs: TugState[];
   contested: { g: number; id: number } | null;
@@ -717,6 +718,23 @@ export function useRoomSession(code: string): RoomSession {
 
   const dismissNotice = useCallback(() => setNotice(null), []);
   const clearHint = useCallback(() => setHint(null), []);
+  const previewHint = useCallback((level: 1 | 2 | 3 | 4) => {
+    const current = engineRef.current;
+    const mine = myIdRef.current;
+    if (!current || !mine || current.isComplete()) return;
+    const chosen = current.pickHintTarget();
+    if (!chosen) return;
+    setHint(previous => {
+      const own = previous?.playerId === mine ? previous : null;
+      return {
+        playerId: mine,
+        level,
+        pieceId: level === 1 ? null : (own?.pieceId ?? chosen.pieceId),
+        region: own?.region ?? chosen.region,
+        at: Date.now(),
+      };
+    });
+  }, []);
 
   /* --- derived ------------------------------------------------------------ */
 
@@ -752,6 +770,7 @@ export function useRoomSession(code: string): RoomSession {
     pings,
     hint,
     clearHint,
+    previewHint,
     chat,
     tugs,
     contested,
