@@ -82,7 +82,7 @@ export function fitGrid(aspect: number, target: number): GridFit {
       const countErr = Math.abs(count - target) / target;
       const cellAspect = safeAspect / (cols / rows);
       const squareErr = Math.abs(Math.log(cellAspect));
-      const score = countErr * 3 + squareErr;
+      const score = countErr * 100 + squareErr;
       if (score < bestScore) {
         bestScore = score;
         best = { cols, rows, count };

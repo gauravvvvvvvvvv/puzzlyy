@@ -468,15 +468,15 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
         )}
         <button type="button" onClick={onLeave} className="mx-3 mb-2 flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--line)] text-sm text-[var(--color-danger-400)] transition hover:bg-[var(--surface-inset)] active:scale-95"><Icon name="arrow-left" size={18} />Leave room</button>
         <form onSubmit={sendMessage} className="flex gap-2 border-t border-[var(--line)] p-3">
-          <input value={message} onChange={e => {
+          <textarea rows={1} value={message} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} onChange={e => {
             setMessage(e.target.value);
             if (Date.now() - typingAt.current > 900) {
               typingAt.current = Date.now();
               notify({ t: 'typing', active: e.target.value.length > 0 });
             }
           }} maxLength={500}
-            placeholder="Message the room..." aria-label="Room message"
-            className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-inset)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" />
+            placeholder="Message the room... (Shift+Enter for new line)" aria-label="Room message"
+            className="min-w-0 flex-1 resize-none rounded-lg border border-[var(--line)] bg-[var(--surface-inset)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" />
           <button disabled={!message.trim()} type="submit"
             className="min-h-11 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm text-white transition-all hover:brightness-110 hover:shadow-md active:scale-95 disabled:opacity-40">Send</button>
         </form>
