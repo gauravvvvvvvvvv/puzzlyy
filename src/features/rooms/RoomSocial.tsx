@@ -459,7 +459,7 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
             onClick={()=>session.reactNow(emoji,session.engine?.geometry.boardW ?? 0,session.engine?.geometry.boardH ?? 0)}
             className="grid size-10 place-items-center rounded-lg text-xl transition hover:bg-[var(--surface-inset)] active:scale-90">{emoji}</button>)}
         </div>}
-        <AmbientSoundscape />
+        <AmbientSoundscape roomTheme={session.room?.theme} />
         <div ref={pane} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3" aria-label="Room messages" role="log" aria-live="polite" aria-relevant="additions" onScroll={event => { const el = event.currentTarget; nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 72; }}>
           {session.chat.length === 0 && <p className="mx-auto max-w-[16rem] py-8 text-center text-xs leading-relaxed text-[var(--fg-muted)]">
             Your conversation stays here when you play the next puzzle.

@@ -33,6 +33,8 @@ import type { Camera, HintState, RemoteLock, RendererTheme } from '@/lib/puzzle/
 import { chime, mergeKey, snap, warmSound } from '@/lib/puzzle/sound';
 import type { PieceAtlas } from '@/lib/puzzle/sprites';
 import { playerColor } from '@/lib/multiplayer/identity';
+import { RoomThemeEnvironment } from '@/features/theme/RoomThemeEnvironment';
+import { roomWorld } from '@/lib/theme/roomWorlds';
 import { CURSOR_TTL_MS } from '@/hooks/useRoomSession';
 import type { RoomSession } from '@/hooks/useRoomSession';
 import type { Player } from '@/types/models';
@@ -364,7 +366,8 @@ export function PuzzleBoard({
           dot.dataset.trail = '';
           dot.className = 'pointer-events-none absolute size-1.5 rounded-full shadow-sm';
           const player = playersRef.current.find(p => p.id === id);
-          dot.style.background = player ? playerColor(player.colorId) : '#f89e6b';
+          dot.style.background = roomWorld(session.room?.theme).trail;
+          dot.style.boxShadow = '0 0 9px '+roomWorld(session.room?.theme).trail;
           dot.style.transform = 'translate3d(' + spot.x + 'px,' + spot.y + 'px,0)';
           dot.style.animation = 'puzzly-trail-fade .55s ease-out forwards';
           dot.onanimationend = () => dot.remove();
@@ -865,6 +868,7 @@ export function PuzzleBoard({
 
   return (
     <div className="relative size-full overflow-hidden" style={{ background: 'var(--board-bg)' }}>
+      <RoomThemeEnvironment />
       {engine.puzzle.settings.rotation && (
         <div className="pointer-events-auto absolute bottom-24 left-3 z-30 flex gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)]/95 p-1.5 shadow-lg sm:bottom-20"
           role="group" aria-label="Rotate the piece you are holding">
@@ -937,7 +941,7 @@ export function PuzzleBoard({
         </div>}
         {session.moments.filter(m => Date.now() - m.at < 4500).map(m => (
           <div key={m.id} className="pointer-events-none absolute inset-x-4 top-1/4 z-30 flex justify-center">
-            <span className="rounded-full border border-amber-400/50 bg-[var(--surface)]/95 px-5 py-3 text-sm font-semibold shadow-2xl"
+            <span className="puzzly-world-celebration rounded-full border bg-[var(--surface)]/95 px-5 py-3 text-sm font-semibold shadow-2xl"
               style={{animation:'puzzly-moment-pop 1s ease-in-out infinite alternate'}}>
               {m.kind === 'combo' ? '✨' : m.kind === 'high-five' ? '🙌' : '🌟'} {m.label}
             </span>

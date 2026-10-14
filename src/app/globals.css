@@ -548,3 +548,21 @@
   --accent: #006d82;
   --accent-soft: rgba(0, 109, 130, .13);
 }
+
+
+.puzzly-world {--world-glow:rgba(255,207,143,.2)}
+[data-room-theme="cozy"] .puzzly-world-pattern{background:repeating-linear-gradient(8deg,transparent 0 38px,rgba(255,208,154,.07) 39px,transparent 41px),repeating-linear-gradient(90deg,transparent 0 100px,rgba(102,55,30,.12) 102px,transparent 104px)}
+[data-room-theme="cozy"] .puzzly-world-glow{background:radial-gradient(ellipse at 83% 8%,rgba(255,218,160,.26),transparent 45%)}
+[data-room-theme="arcade"] .puzzly-world-pattern{background-image:linear-gradient(rgba(94,244,250,.13) 1px,transparent 1px),linear-gradient(90deg,rgba(249,93,244,.14) 1px,transparent 1px);background-size:40px 40px}
+[data-room-theme="arcade"] .puzzly-world-glow{background:radial-gradient(ellipse at 80% 18%,rgba(218,63,250,.21),transparent 60%)}
+[data-room-theme="space"] .puzzly-world-pattern{background-image:radial-gradient(circle,rgba(255,255,255,.7) 1px,transparent 1.5px),radial-gradient(circle,rgba(154,201,255,.62) 1px,transparent 1.5px);background-size:67px 73px,113px 109px;background-position:8px 12px,43px 56px;opacity:.65}
+[data-room-theme="space"] .puzzly-world-glow{background:radial-gradient(ellipse at 76% 16%,rgba(100,87,225,.28),transparent 56%),radial-gradient(ellipse at 12% 85%,rgba(66,151,250,.18),transparent 50%)}
+[data-room-theme="beach"] .puzzly-world-pattern{background:repeating-radial-gradient(ellipse at 15% 120%,transparent 0 32px,rgba(189,250,241,.14) 34px,transparent 39px)}
+[data-room-theme="beach"] .puzzly-world-glow{background:linear-gradient(180deg,rgba(255,222,146,.12),transparent 60%,rgba(94,234,238,.16))}
+.puzzly-world-vignette{background:radial-gradient(ellipse,transparent 50%,rgba(0,0,0,.12))}
+[data-room-theme="cozy"]{--world-snap:#ffd4a0;--world-glow:rgba(255,200,133,.22)}
+[data-room-theme="arcade"]{--world-snap:#ff78f3;--world-glow:rgba(255,120,243,.25)}
+[data-room-theme="space"]{--world-snap:#acbaff;--world-glow:rgba(172,186,255,.24)}
+[data-room-theme="beach"]{--world-snap:#8ce9df;--world-glow:rgba(140,233,223,.24)}
+.puzzly-world-celebration{border-color:var(--world-snap,var(--accent));box-shadow:0 0 20px var(--world-glow)}
+@media(prefers-reduced-motion:reduce){.puzzly-world,.puzzly-world *{animation:none!important;transition:none!important}}
