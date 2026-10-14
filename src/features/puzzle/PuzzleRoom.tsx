@@ -95,31 +95,28 @@ export function PuzzleRoom({
 
   useEffect(() => setSound(soundEnabled()), []);
 
-  // Request fullscreen on the canvas container, never the whole room shell.
-  // Browser fullscreen displays only this element and its children.
-  const toggleFullscreen = useCallback(async () => {
-    const board = fullscreenRef.current;
-    if (!board) return;
-    if (document.fullscreenElement === board) {
-      await document.exitFullscreen();
-      return;
-    }
-    try {
-      await board.requestFullscreen();
-    } catch {
-      // Unsupported or denied: preserve the normal game layout.
-      setBoardError('Fullscreen is not available in this browser.');
-    }
+  // Browser Fullscreen APIs can be denied (especially on iOS). A fixed canvas
+  // surface works consistently and hides the room chrome on every device.
+  const toggleFullscreen = useCallback(() => {
+    setFullscreen(active => !active);
   }, []);
 
   useEffect(() => {
-    const changed = () => {
-      setFullscreen(document.fullscreenElement === fullscreenRef.current);
-      requestAnimationFrame(() => rendererRef.current?.resize());
+    if (!fullscreen) return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setFullscreen(false);
+      }
     };
-    document.addEventListener('fullscreenchange', changed);
-    return () => document.removeEventListener('fullscreenchange', changed);
-  }, []);
+    document.addEventListener('keydown', escape, true);
+    return () => document.removeEventListener('keydown', escape, true);
+  }, [fullscreen]);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => rendererRef.current?.resize());
+    return () => cancelAnimationFrame(id);
+  }, [fullscreen]);
 
   /* --- the clock ---------------------------------------------------------- */
 
@@ -353,7 +350,9 @@ export function PuzzleRoom({
 
       {/* ---- board ------------------------------------------------------- */}
       <div className="relative min-h-0 flex-1">
-        <div ref={fullscreenRef} className="relative size-full overflow-hidden bg-[var(--bg-deep)]">
+        <div ref={fullscreenRef} className={fullscreen
+          ? "fixed inset-0 z-[100] h-[100dvh] w-screen overflow-hidden bg-[var(--bg-deep)]"
+          : "relative size-full overflow-hidden bg-[var(--bg-deep)]"}>
           <PuzzleBoard
           session={session}
           engine={engine}
