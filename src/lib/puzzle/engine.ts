@@ -409,9 +409,16 @@ export class PuzzleEngine {
   /* Locking — one player per group at a time (spec §12)                   */
   /* ---------------------------------------------------------------------- */
 
+  /** Groups accurately seated in the puzzle frame are fixed in place. */
+  isAnchored(groupId: number): boolean {
+    const group = this.groups.get(groupId);
+    return Boolean(group && group.rot === 0 &&
+      Math.abs(group.ox) < 0.001 && Math.abs(group.oy) < 0.001);
+  }
+
   grab(groupId: number, playerId: string): number | null {
     const group = this.groups.get(groupId);
-    if (!group) return null;
+    if (!group || this.isAnchored(groupId)) return null;
     const holder = this.locks.get(groupId);
     if (holder && holder !== playerId) return null;
     this.locks.set(groupId, playerId);
@@ -447,7 +454,7 @@ export class PuzzleEngine {
    */
   movePiece(groupId: number, ox: number, oy: number, playerId?: string): boolean {
     const group = this.groups.get(groupId);
-    if (!group) return false;
+    if (!group || this.isAnchored(groupId)) return false;
     if (playerId) {
       const holder = this.locks.get(groupId);
       if (holder && holder !== playerId) return false;
@@ -471,7 +478,7 @@ export class PuzzleEngine {
     playerId?: string,
   ): RotateResult | null {
     const group = this.groups.get(groupId);
-    if (!group) return null;
+    if (!group || this.isAnchored(groupId)) return null;
     if (playerId) {
       const holder = this.locks.get(groupId);
       if (holder && holder !== playerId) return null;
@@ -567,7 +574,16 @@ export class PuzzleEngine {
       return { moved: null, merges: [], completed: false, straightened: null };
     }
     const before: Transform = { ox: group.ox, oy: group.oy, rot: group.rot };
+    if (this.isAnchored(groupId)) {
+      return { moved: null, merges: [], completed: false, straightened: null };
+    }
     this.movePiece(groupId, ox, oy, playerId);
+    // An individual piece can be placed straight into its exact home without
+    // having to touch a neighbour first. Lock it on the canonical 0,0 offset.
+    if (group.rot === 0 && Math.hypot(group.ox, group.oy) <= this.geometry.snapDistance * 0.7) {
+      group.ox = 0;
+      group.oy = 0;
+    }
 
     const ops: JournalOp[] = [];
     const merges: MergeResult[] = [];
@@ -585,7 +601,8 @@ export class PuzzleEngine {
       // The stationary group defines the resting place.
       const targetOx = other.ox;
       const targetOy = other.oy;
-      const keeperId = current.pieces.length >= other.pieces.length ? currentId : snap.other;
+      const keeperId = this.isAnchored(snap.other) ? snap.other :
+        current.pieces.length >= other.pieces.length ? currentId : snap.other;
       const donorId = keeperId === currentId ? snap.other : currentId;
       const keeper = this.groups.get(keeperId)!;
       const donor = this.groups.get(donorId)!;
