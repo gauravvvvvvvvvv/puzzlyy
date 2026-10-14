@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - feat/puzzlyy-realtime-social-playground
+      - feat/immersive-room-worlds
   pull_request:
     branches:
       - main
       - feat/shared-jukebox-spectators-playground
+      - fix/audit-priority-accessibility-ux
 
 jobs:
   build-and-protocol:
