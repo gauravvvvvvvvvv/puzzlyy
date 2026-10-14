@@ -284,13 +284,29 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rosterKey, notify, closePeer]);
 
+  const latestCountRef = useRef(session.chat.length);
+  const chatOpenRef = useRef(open);
+  const nearBottomRef = useRef(true);
+  chatOpenRef.current = open;
+
   useEffect(() => {
-    if (pane.current) pane.current.scrollTop = pane.current.scrollHeight;
-    if (!open && session.chat.length) setUnread(v => v + 1);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const previous = latestCountRef.current;
+    latestCountRef.current = session.chat.length;
+    if (session.chat.length <= previous) return;
+    if (chatOpenRef.current && nearBottomRef.current) {
+      if (pane.current) pane.current.scrollTop = pane.current.scrollHeight;
+    } else {
+      setUnread(value => value + session.chat.length - previous);
+    }
   }, [session.chat.length]);
 
-  useEffect(() => { if (open) setUnread(0); }, [open]);
+  useEffect(() => {
+    if (open) {
+      setUnread(0);
+      nearBottomRef.current = true;
+      if (pane.current) pane.current.scrollTop = pane.current.scrollHeight;
+    }
+  }, [open]);
 
   useEffect(() => () => {
     for (const pc of pcs.current.values()) pc.close();
@@ -428,7 +444,7 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
             className="grid size-10 place-items-center rounded-lg text-xl transition hover:bg-[var(--surface-inset)] active:scale-90">{emoji}</button>)}
         </div>}
         <AmbientSoundscape />
-        <div ref={pane} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3" aria-label="Room messages" role="log" aria-live="polite" aria-relevant="additions">
+        <div ref={pane} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3" aria-label="Room messages" role="log" aria-live="polite" aria-relevant="additions" onScroll={event => { const el = event.currentTarget; nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 72; }}>
           {session.chat.length === 0 && <p className="mx-auto max-w-[16rem] py-8 text-center text-xs leading-relaxed text-[var(--fg-muted)]">
             Your conversation stays here when you play the next puzzle.
           </p>}
