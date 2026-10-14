@@ -8,6 +8,15 @@ import { RoomJukebox } from '@/features/rooms/RoomJukebox';
 import { Icon } from '@/components/ui/Icon';
 import { useClipboard } from '@/hooks/useClipboard';
 
+function renderMessageLinks(text: string) {
+  return text.split(/(https?:\/\/[^\s]+)/g).map((part, index) =>
+    /^https?:\/\//.test(part)
+      ? <a key={index} href={part} target="_blank" rel="noopener noreferrer"
+          className="break-all underline underline-offset-2 hover:opacity-75">{part}</a>
+      : part,
+  );
+}
+
 type Mode = { audio: boolean; video: boolean };
 type Remote = { playerId: string; stream: MediaStream };
 const OFF: Mode = { audio: false, video: false };
@@ -419,7 +428,7 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
             className="grid size-10 place-items-center rounded-lg text-xl transition hover:bg-[var(--surface-inset)] active:scale-90">{emoji}</button>)}
         </div>}
         <AmbientSoundscape />
-        <div ref={pane} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3" aria-label="Room messages" role="log">
+        <div ref={pane} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3" aria-label="Room messages" role="log" aria-live="polite" aria-relevant="additions">
           {session.chat.length === 0 && <p className="mx-auto max-w-[16rem] py-8 text-center text-xs leading-relaxed text-[var(--fg-muted)]">
             Your conversation stays here when you play the next puzzle.
           </p>}
@@ -440,7 +449,7 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
                   <p className={'mb-1 text-xs font-semibold ' + (mine ? 'text-orange-400' : 'text-sky-400')}>
                     {mine ? 'You' : entry.name}
                   </p>
-                  <p className="break-words whitespace-pre-wrap leading-relaxed">{entry.text}</p>
+                  <p className="break-words whitespace-pre-wrap leading-relaxed">{renderMessageLinks(entry.text)}</p>
                   <time dateTime={new Date(entry.createdAt).toISOString()}
                     className="mt-1.5 block text-right text-[10px] text-[var(--fg-subtle)]"
                     title={new Date(entry.createdAt).toLocaleString()}>
