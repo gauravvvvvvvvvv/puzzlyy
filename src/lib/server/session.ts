@@ -709,10 +709,23 @@ function onMusic(ctx: Ctx, event: Extract<ClientEvent, { t: 'music' }>): void {
       music.current = event.index;
       music.position = 0;
     } else if (event.action === 'remove' && event.index !== undefined && event.index < music.queue.length) {
+      // Removing an earlier queue entry must not restart the current song.
+      if (music.playing) music.position += (ctx.now - music.updatedAt) / 1000;
+      const removedCurrent = event.index === music.current;
       music.queue.splice(event.index, 1);
-      music.current = Math.min(music.current, Math.max(0, music.queue.length - 1));
+      if (event.index < music.current) music.current--;
+      else if (removedCurrent) music.current = Math.min(music.current, music.queue.length - 1);
+      if (removedCurrent) music.position = 0;
+      if (!music.queue.length) {
+        music.current = 0;
+        music.position = 0;
+        music.playing = false;
+      }
+    } else if (event.action === 'clear') {
+      music.queue = [];
+      music.current = 0;
       music.position = 0;
-      if (!music.queue.length) music.playing = false;
+      music.playing = false;
     } else if (event.action === 'seek' && event.position !== undefined) {
       music.position = event.position;
     } else return;

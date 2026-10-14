@@ -292,7 +292,7 @@ function parseClientEvent(value: unknown): ClientEvent | null {
       return { t: 'typing', active: asBool(raw.active) };
     case 'music': {
       const action = raw.action;
-      if (action !== 'add' && action !== 'remove' && action !== 'play' &&
+      if (action !== 'add' && action !== 'remove' && action !== 'clear' && action !== 'play' &&
           action !== 'pause' && action !== 'next' && action !== 'seek' && action !== 'select') return null;
       if (action === 'add') {
         const t = raw.track;

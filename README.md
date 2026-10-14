@@ -366,12 +366,19 @@ Puzzly is **source-available, not open source**. You may inspect the code for ev
 ## Social playground additions
 
 - **Room music queue:** Paste YouTube video or playlist links, or Spotify track,
-  album, or playlist links in Room Chat → Shared jukebox. Everyone can add; the
-  host starts, pauses, selects and removes queue items. The queue and playback
-  time survive refreshes and subsequent puzzles.
-- **YouTube sync:** Each participant clicks *Listen together* to satisfy browser
-  playback-permission rules. The YouTube iframe API seeks within about three
-  seconds of the host playback clock; playback is not sample-accurate.
+  album, or playlist links in Room Chat → Jukebox. Everyone can add; the host
+  controls room playback, selects entries, removes individual songs or playlist
+  entries, and can clear the queue. Removing an earlier entry does not restart
+  the current song. The queue and playback clock survive refreshes and rounds.
+- **Minimize without restarting:** The jukebox has a custom queue interface and
+  a dockable player. Collapsing the queue or moving the video into its floating
+  mini-player does **not** unmount the underlying player. YouTube uses one
+  persistent IFrame API instance to advance through queued videos and playlists.
+  The mini-player stays visible to comply with YouTube player requirements;
+  fully hidden background/audio-only YouTube playback is not provided.
+- **YouTube sync:** Each listener may need to press *Play here* once because
+  browsers restrict autoplay. YouTube room synchronization seeks to the host
+  playback clock when needed; it is not sample-accurate.
 - **Spotify limitation:** Spotify's official embed does not offer shared
   programmatic play/pause/seek. A Spotify queue item is shared, and members
   play it individually in the official embedded player. Truly synchronized

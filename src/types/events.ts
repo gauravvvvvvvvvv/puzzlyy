@@ -57,7 +57,7 @@ export type ClientEvent =
   /** Host re-cuts the same picture for a rematch. */
   | { t: 'restart' }
   /** Voluntary, explicit leave (closing a tab is handled by the SSE close). */
-  | { t: 'music'; action: 'add' | 'remove' | 'play' | 'pause' | 'next' | 'seek' | 'select'; track?: MusicTrack; index?: number; position?: number }
+  | { t: 'music'; action: 'add' | 'remove' | 'clear' | 'play' | 'pause' | 'next' | 'seek' | 'select'; track?: MusicTrack; index?: number; position?: number }
   | { t: 'theme'; theme: RoomTheme }
   | { t: 'sticker'; symbol: string; x: number; y: number }
   | { t: 'chat'; text: string }
