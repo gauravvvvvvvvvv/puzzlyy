@@ -133,6 +133,7 @@ export interface RoomSession {
   choosePuzzle: (image: ImageAsset, settings: PuzzleSettings) => Promise<void>;
   loadIceServers: () => Promise<RTCIceServer[]>;
   decodeSignal: (sealed: string) => Promise<string>;
+  sendChat: (text: string) => void;
 
   send: (event: ClientEvent) => void;
   flush: () => void;
@@ -323,11 +324,28 @@ export function useRoomSession(code: string): RoomSession {
         }
 
         case 'chat': {
-          // Never display a message solely on the authority of a broadcast
-          // frame. Reload the committed room record instead; peer broadcasts
-          // can be forged on the public channel.
+          // Server-originated room events render immediately for every connected
+          // participant. Persistence reconciliation runs asynchronously.
+          setChat(current => {
+            const committed = event.message;
+            const withoutDuplicate = current.filter(m =>
+              m.id !== committed.id &&
+              !(m.id.startsWith('pending:') &&
+                m.playerId === committed.playerId &&
+                m.text === committed.text &&
+                Math.abs(m.createdAt - committed.createdAt) < 10000));
+            return [...withoutDuplicate, committed].slice(-200);
+          });
+          // Public-channel broadcasts can be forged. Verify against durable
+          // history off the rendering path and discard unauthenticated entries.
           void fetchRoom(code)
-            .then(fresh => setChat(fresh.view.chat ?? []))
+            .then(fresh => setChat(current => {
+              const persisted = fresh.view.chat ?? [];
+              const pending = current.filter(m => m.id.startsWith('pending:') &&
+                !persisted.some(row => row.playerId === m.playerId && row.text === m.text &&
+                  Math.abs(row.createdAt - m.createdAt) < 10000));
+              return [...persisted, ...pending].slice(-200);
+            }))
             .catch(() => undefined);
           return;
         }
@@ -631,8 +649,28 @@ export function useRoomSession(code: string): RoomSession {
   /* --- actions ------------------------------------------------------------ */
 
   const send = useCallback((event: ClientEvent) => {
+    // Local state should reflect the click without waiting for the server CAS.
+    // The later authoritative event/snapshot still wins on reconciliation.
+    if (event.t === 'ready') {
+      const id = myIdRef.current;
+      setPlayers(roster => roster.map(player =>
+        player.id === id ? { ...player, ready: event.ready } : player));
+    }
     transportRef.current?.send(event);
   }, []);
+
+  const sendChat = useCallback((text: string) => {
+    const value = text.trim().slice(0, 500);
+    if (!value || !myIdRef.current) return;
+    const mine = players.find(player => player.id === myIdRef.current);
+    setChat(current => [...current.slice(-199), {
+      id: 'pending:' + Date.now() + ':' + Math.random().toString(36).slice(2),
+      playerId: myIdRef.current, name: mine?.name ?? 'You',
+      text: value, createdAt: Date.now(),
+    }]);
+    transportRef.current?.send({ t: 'chat', text: value });
+    transportRef.current?.flush();
+  }, [players]);
 
   const flush = useCallback(() => {
     transportRef.current?.flush();
@@ -712,6 +750,7 @@ export function useRoomSession(code: string): RoomSession {
     choosePuzzle,
     loadIceServers,
     decodeSignal,
+    sendChat,
     send,
     flush,
     subscribe,

@@ -267,12 +267,12 @@ export function PuzzleRoom({
   /* ---------------------------------------------------------------------- */
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* ---- chrome ------------------------------------------------------- */}
       {/* In landscape the notch sits over the left edge, which is exactly where the
           logo and the leave button live — hence the inset-aware padding. */}
       <header
-        className="flex shrink-0 items-center gap-3 border-b border-[var(--line)] py-2"
+        className="flex shrink-0 items-center gap-2 sm:gap-3 border-b border-[var(--line)] py-2"
         style={{
           paddingLeft: 'max(0.75rem, env(safe-area-inset-left))',
           paddingRight: 'max(0.75rem, env(safe-area-inset-right))',
@@ -305,7 +305,7 @@ export function PuzzleRoom({
           </div>
         </div>
 
-        <p className="num shrink-0 tabular text-sm text-[var(--fg-muted)]" aria-label="Time played">
+        <p className="num hidden shrink-0 tabular text-sm text-[var(--fg-muted)] sm:block" aria-label="Time played">
           {formatDuration(elapsed)}
         </p>
 

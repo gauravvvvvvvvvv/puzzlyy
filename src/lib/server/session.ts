@@ -766,7 +766,7 @@ function onStart(ctx: Ctx, auto: boolean): void {
   if (!auto) {
     // Only the host may start early, and only if the room allows it (spec §7).
     if (!ctx.seat.isHost) return;
-    if (!ctx.record.room.settings.hostCanForceStart) return;
+    if (!ctx.record.room.settings.hostCanForceStart && ctx.record.players.length > 1) return;
   }
   ctx.record.room.status = 'playing';
   ctx.engine.status = 'playing';

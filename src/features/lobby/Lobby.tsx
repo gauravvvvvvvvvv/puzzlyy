@@ -58,6 +58,7 @@ export function Lobby({
 }: LobbyProps) {
   const { copied, copy, canShare, share } = useClipboard();
   const [inviteUrl, setInviteUrl] = useState('');
+  const [readyIntent, setReadyIntent] = useState<boolean | null>(null);
 
   // `location` only exists in the browser, and the URL is the one thing on this
   // page that genuinely cannot be rendered on a server.
@@ -65,9 +66,13 @@ export function Lobby({
     setInviteUrl(`${window.location.origin}/room/${room.code}`);
   }, [room.code]);
 
+  // Paint user intent immediately. The authoritative roster will catch up after
+  // the network/database round trip, not hold the button hostage.
+  const ready = readyIntent ?? (me?.ready ?? false);
+  useEffect(() => { if (readyIntent === me?.ready) setReadyIntent(null); }, [me?.ready, readyIntent]);
   const alone = players.length < 2;
   const everyoneReady = players.length >= 2 && players.every((p) => p.ready);
-  const canStart = isHost && cutReady && (solo || everyoneReady || !alone);
+  const canStart = isHost && cutReady && (solo || alone || everyoneReady || room.settings.hostCanForceStart);
 
   const blurb = useMemo(
     () => PIECE_COUNT_BLURB[puzzle.settings.pieceCount] ?? '',
@@ -181,7 +186,7 @@ export function Lobby({
           {alone && !solo ? (
             <p className="mt-4 flex items-center gap-2 rounded-md bg-[var(--surface-inset)] px-3 py-2.5 text-xs text-[var(--fg-muted)]">
               <Icon name="users" size={15} />
-              The board opens the moment they arrive. You can start alone too.
+              You can start solving now, or wait for someone to join.
             </p>
           ) : null}
         </div>
@@ -191,17 +196,18 @@ export function Lobby({
           {!solo ? (
             <Button
               size="lg"
-              variant={me?.ready ? 'secondary' : 'primary'}
-              onClick={() => onReady(!me?.ready)}
-              aria-pressed={me?.ready ?? false}
+              variant={ready ? 'secondary' : 'primary'}
+              onClick={() => { setReadyIntent(!ready); onReady(!ready); }}
+              aria-pressed={ready}
+              className={'w-full min-h-12 transition-all duration-200 active:scale-[0.98] hover:-translate-y-0.5 ' + (ready ? 'ring-2 ring-[var(--accent)] shadow-lg' : '')}
             >
-              <Icon name={me?.ready ? 'check' : 'play'} size={20} />
-              {me?.ready ? "You're ready" : "I'm ready"}
+              <Icon name={ready ? 'check' : 'play'} size={20} />
+              {ready ? "You're ready ✓" : "I'm ready"}
             </Button>
           ) : null}
 
           {isHost ? (
-            <Button size="lg" variant="primary" onClick={onStart} disabled={!canStart}>
+            <Button size="lg" variant="primary" className="w-full min-h-12 active:scale-[0.98] hover:-translate-y-0.5" onClick={onStart} disabled={!canStart}>
               <Icon name="sparkle" size={20} />
               {!cutReady
                 ? 'Cutting the pieces…'
@@ -209,7 +215,7 @@ export function Lobby({
                   ? 'Start solving'
                   : everyoneReady
                     ? 'Start — everyone’s ready'
-                    : 'Start anyway'}
+                    : room.settings.hostCanForceStart ? 'Start anyway' : 'Waiting for everyone'}
             </Button>
           ) : (
             <p
