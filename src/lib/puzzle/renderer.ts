@@ -321,7 +321,7 @@ export class PuzzleRenderer {
    * falls through to the piece underneath.
    */
   pickPiece(wx: number, wy: number): { pieceId: number; groupId: number } | null {
-    const groups = this.engine.groupList.sort((a, b) => b.z - a.z);
+    const groups = this.engine.groupList.filter(g => !this.engine.isAnchored(g.id)).sort((a, b) => b.z - a.z);
     for (const group of groups) {
       const [sx, sy] = rotateQuarter(wx - group.ox, wy - group.oy, -group.rot);
       const box = this.solvedBounds(group);
@@ -459,7 +459,11 @@ export class PuzzleRenderer {
   private drawPieces(ctx: CanvasRenderingContext2D, view: Box, now: number): void {
     const g = this.engine.geometry;
     const atlas = this.atlas;
-    const groups = this.engine.groupList.sort((a, b) => a.z - b.z);
+    const groups = this.engine.groupList.sort((a, b) => {
+      const anchoredA = this.engine.isAnchored(a.id);
+      const anchoredB = this.engine.isAnchored(b.id);
+      return anchoredA === anchoredB ? a.z - b.z : anchoredA ? 1 : -1;
+    });
     const spriteW = atlas.spriteW;
     const spriteH = atlas.spriteH;
 

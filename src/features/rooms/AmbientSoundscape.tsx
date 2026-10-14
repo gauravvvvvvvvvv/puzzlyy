@@ -21,31 +21,56 @@ export function AmbientSoundscape({roomTheme}:{roomTheme?:string}) {
     if (scene === 'off') return;
     if (typeof AudioContext === 'undefined') return;
     const ctx = new AudioContext();
-    const seconds = 6;
+    // Distinct acoustic textures: surf swells, ember pops, rain droplets,
+    // or a warm electronic drone. Avoid recycling the same noise for all scenes.
+    const seconds = 12;
     const samples = Math.round(ctx.sampleRate * seconds);
     const buffer = ctx.createBuffer(1, samples, ctx.sampleRate);
     const data = buffer.getChannelData(0);
-    let low = 0;
-    // Seamless-ish textured noise with a gentle changing envelope.
+    let brown = 0;
+    let previous = 0;
+    const pops = new Float32Array(samples);
+    if (scene === 'fireplace' || scene === 'rain') {
+      const density = scene === 'fireplace' ? 22 : 220;
+      for (let n = 0; n < seconds * density; n++) {
+        const at = Math.floor(Math.random() * samples);
+        const duration = Math.round(ctx.sampleRate * (scene === 'fireplace' ? .014 : .006));
+        const strength = scene === 'fireplace' ? .25 : .055;
+        for (let j = 0; j < duration && at + j < samples; j++) {
+          pops[at + j] += (Math.random() * 2 - 1) * strength * Math.exp(-j / (duration * .23));
+        }
+      }
+    }
     for (let i = 0; i < samples; i++) {
       const t = i / ctx.sampleRate;
-      const random = Math.random() * 2 - 1;
-      low = low * .995 + random * .005;
-      const wave = Math.sin(t * (scene === 'ocean' ? 0.36 : 1.8) * Math.PI * 2);
-      data[i] = scene === 'ocean' ? low * (0.65 + .35 * wave) * 7 :
-        scene === 'fireplace' ? (Math.abs(random) > .992 ? random * .48 : low * 2) :
-        random * .14 + low * 1.2;
+      const white = Math.random() * 2 - 1;
+      brown = (brown + .024 * white) / 1.024;
+      const surf = Math.pow(.5 + .5 * Math.sin(2 * Math.PI * t / 6), 2);
+      if (scene === 'ocean') {
+        data[i] = (brown * 2 + white * .11) * (.12 + .88 * surf);
+      } else if (scene === 'fireplace') {
+        data[i] = brown * .22 + pops[i];
+      } else if (scene === 'rain') {
+        previous = previous * .83 + white * .17;
+        data[i] = (white - previous) * .085 + pops[i];
+      } else {
+        // Slow, beating analog-style chord with no sharp synthetic hiss.
+        const chords = [110, 164.81, 220, 329.63];
+        data[i] = chords.reduce((sum, f, n) =>
+          sum + Math.sin(2 * Math.PI * f * t + .11 * Math.sin(t * (.6 + n * .09))) * (.07 / (n + 1)), 0);
+      }
     }
     const source = ctx.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
     const filter = ctx.createBiquadFilter();
     filter.type = scene === 'rain' ? 'highpass' : 'lowpass';
-    filter.frequency.value = scene === 'rain' ? 230 : scene === 'ocean' ? 500 : 1100;
+    filter.frequency.value = scene === 'rain' ? 420 : scene === 'ocean' ? 850 : scene === 'fireplace' ? 2100 : 1800;
     const gain = ctx.createGain();
     gain.gain.value = volume;
     source.connect(filter).connect(gain).connect(ctx.destination);
     source.start();
+    void ctx.resume();
     audio.current = { ctx, gain, source };
     return () => { source.stop(); void ctx.close(); if (audio.current?.ctx === ctx) audio.current = null; };
   }, [scene]);
