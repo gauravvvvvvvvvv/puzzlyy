@@ -34,3 +34,4 @@ jobs:
           node scripts/smoke-social.mjs http://127.0.0.1:3000
           node scripts/smoke.mjs http://127.0.0.1:3000
           node scripts/smoke-edge.mjs http://127.0.0.1:3000
+          node scripts/smoke-playground.mjs http://127.0.0.1:3000
