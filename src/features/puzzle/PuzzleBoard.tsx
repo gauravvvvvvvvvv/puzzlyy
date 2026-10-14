@@ -269,6 +269,8 @@ export function PuzzleBoard({
     const sync = () => rendererRef.current?.setTheme(readTheme(canvasRef.current));
     const observer = new MutationObserver(sync);
     observer.observe(target, { attributes: true, attributeFilter: ['data-theme'] });
+    const roomThemeElement = canvasRef.current?.closest('[data-room-theme]');
+    if (roomThemeElement) observer.observe(roomThemeElement, {attributes: true, attributeFilter: ['data-room-theme']});
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     media.addEventListener('change', sync);
     return () => {

@@ -50,7 +50,10 @@ function MediaTile({ stream, label, muted = false }: {
  * and puzzle changes. Voice/video permissions are requested only on click.
  * WebRTC carries the media; authenticated room events carry signaling.
  */
-export function RoomSocial({ session, code, onLeave }: { session: RoomSession; code: string; onLeave: () => void }) {
+export function RoomSocial({ session, code, onLeave, themePreview, onThemePreview }: {
+  session: RoomSession; code: string; onLeave: () => void;
+  themePreview?: string | null; onThemePreview?: (theme: 'cozy' | 'arcade' | 'space' | 'beach') => void;
+}) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const { copied, copy, share, canShare } = useClipboard();
@@ -346,64 +349,56 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
         className="fixed inset-0 z-40 bg-black/35 lg:hidden" aria-label="Close room chat" />}
       <aside className={(open ? 'flex fixed inset-y-0 right-0 z-50 w-[min(94vw,420px)]' : 'hidden') +
         ' lg:static lg:z-auto lg:flex lg:w-[min(30vw,380px)] shrink-0 min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-contain border-l border-[var(--line)] bg-[var(--surface)] shadow-xl lg:shadow-none'}>
-        <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--surface)] p-3">
-          <div><p className="text-sm font-semibold">Room chat</p>
-            <p className="text-2xs text-[var(--fg-subtle)]">Room {code} · round {session.room?.round ?? 1}</p>
+        <header className="sticky top-0 z-20 shrink-0 border-b border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">Room chat</p>
+              <p className="truncate text-2xs text-[var(--fg-subtle)]" title={code}>Room {code} · {session.players.filter(p=>!p.spectator).length} playing · {session.players.filter(p=>p.spectator).length} watching</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1" aria-label="Room shortcuts">
+              <button type="button" title="Share room invite" aria-label="Share room invite" onClick={() => void invite()} disabled={!inviteUrl}
+                className="grid size-9 place-items-center rounded-lg border border-[var(--line)] hover:bg-[var(--surface-inset)] active:scale-95 disabled:opacity-50">
+                <Icon name={copied === 'invite' ? 'check' : 'share'} size={17} />
+              </button>
+              <button type="button" title="Copy spectator invite" aria-label="Copy spectator invite"
+                onClick={() => {
+                  const url = window.location.origin + '/room/' + code + '?watch=1';
+                  void copy(url, 'spectate').then(ok => { if (!ok) setInviteError(true); });
+                }}
+                className="grid size-9 place-items-center rounded-lg border border-[var(--line)] hover:bg-[var(--surface-inset)] active:scale-95">
+                <Icon name={copied === 'spectate' ? 'check' : 'eye'} size={17}/>
+              </button>
+              <button type="button" disabled={busy} title={mode.audio ? 'Mute microphone' : 'Enable microphone'}
+                aria-label={mode.audio ? 'Mute microphone' : 'Enable microphone'} aria-pressed={mode.audio}
+                onClick={() => void changeMode({ ...mode, audio: !mode.audio })}
+                className={'grid size-9 place-items-center rounded-lg border transition active:scale-95 disabled:opacity-50 ' +
+                  (mode.audio ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--line)] hover:bg-[var(--surface-inset)]')}>
+                <Icon name={mode.audio ? 'mic' : 'mic-off'} size={18}/>
+              </button>
+              <button type="button" disabled={busy} title={mode.video ? 'Stop camera' : 'Enable camera'}
+                aria-label={mode.video ? 'Stop camera' : 'Enable camera'} aria-pressed={mode.video}
+                onClick={() => void changeMode({ ...mode, video: !mode.video })}
+                className={'grid size-9 place-items-center rounded-lg border transition active:scale-95 disabled:opacity-50 ' +
+                  (mode.video ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--line)] hover:bg-[var(--surface-inset)]')}>
+                <Icon name={mode.video ? 'video' : 'video-off'} size={18}/>
+              </button>
+              <button type="button" title="Close chat" aria-label="Close chat" onClick={() => setOpen(false)}
+                className="grid size-9 place-items-center rounded-lg border border-[var(--line)] hover:bg-[var(--surface-inset)] lg:hidden">
+                <Icon name="close" size={18}/>
+              </button>
+            </div>
           </div>
-          <button type="button" onClick={() => setOpen(false)} className="rounded p-2 lg:hidden">Close</button>
+          {inviteError && <p className="mt-1 break-all text-2xs text-[var(--fg-muted)]">Copy failed. Invite: {inviteUrl}</p>}
+          {busy && <p role="status" className="text-2xs text-[var(--fg-muted)]">Connecting devices…</p>}
+          {hasMedia && <button type="button" onClick={() => setCallExpanded(value => !value)}
+            className="mt-1 text-2xs text-[var(--fg-muted)] underline underline-offset-2">{callExpanded ? 'Minimize call' : 'Expand call'}</button>}
         </header>
-        <div className="flex flex-col gap-2 border-b border-[var(--line)] px-3 py-3">
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => void invite()} disabled={!inviteUrl}
-              className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--line-strong)] bg-[var(--surface-inset)] px-3 text-xs font-semibold transition hover:border-[var(--accent)] hover:bg-[var(--surface-2)] active:scale-95 disabled:opacity-50">
-              <Icon name={copied === 'invite' ? 'check' : 'share'} size={18} />
-              {copied === 'invite' ? 'Invite copied' : canShare ? 'Share invite' : 'Copy invite link'}
-            </button>
-            <code className="max-w-[7rem] truncate text-xs text-[var(--fg-subtle)]" title={inviteUrl}>{code}</code>
-          </div>
-          {inviteError && <p className="break-all text-xs text-[var(--fg-muted)]">Copy this link: {inviteUrl}</p>}
-        </div>
-        <div className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
-          <span className="mr-auto text-xs font-medium text-[var(--fg-muted)]">Voice &amp; video</span>
-          <div className="flex items-center gap-2" role="group" aria-label="Call controls">
-            <button type="button" disabled={busy}
-              aria-label={mode.audio ? 'Turn microphone off' : 'Turn microphone on'}
-              title={mode.audio ? 'Turn microphone off' : 'Turn microphone on'}
-              aria-pressed={mode.audio}
-              onClick={() => void changeMode({ ...mode, audio: !mode.audio })}
-              className={'grid size-11 shrink-0 place-items-center rounded-full border transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-wait disabled:opacity-60 ' +
-                (mode.audio ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' :
-                  'border-[var(--line-strong)] bg-[var(--surface-inset)] text-[var(--fg)] hover:border-[var(--accent)]')}>
-              <Icon name={mode.audio ? 'mic' : 'mic-off'} size={20} />
-            </button>
-            <button type="button" disabled={busy}
-              aria-label={mode.video ? 'Turn camera off' : 'Turn camera on'}
-              title={mode.video ? 'Turn camera off' : 'Turn camera on'}
-              aria-pressed={mode.video}
-              onClick={() => void changeMode({ ...mode, video: !mode.video })}
-              className={'grid size-11 shrink-0 place-items-center rounded-full border transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-wait disabled:opacity-60 ' +
-                (mode.video ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' :
-                  'border-[var(--line-strong)] bg-[var(--surface-inset)] text-[var(--fg)] hover:border-[var(--accent)]')}>
-              <Icon name={mode.video ? 'video' : 'video-off'} size={20} />
-            </button>
-          </div>
-        </div>
-        {(busy || hasMedia) && (
-          <div role="status" className="flex items-center gap-2 border-b border-[var(--line)] px-4 py-2 text-xs text-[var(--fg-muted)]">
-            <span className={'size-1.5 rounded-full ' + (busy ? 'animate-pulse bg-amber-400' : 'bg-emerald-400')} />
-            {busy ? 'Connecting devices…' : mode.video ? 'Camera enabled' : 'Microphone enabled'}
-            {(videoCount > 0 || hasMedia) && <button type="button" onClick={() => setCallExpanded(value => !value)}
-              className="ml-auto rounded-lg px-2 py-1 text-xs font-medium text-[var(--fg)] transition hover:bg-[var(--surface-inset)] active:scale-95">
-              {callExpanded ? 'Compact' : 'Expand call'}
-            </button>}
-          </div>
-        )}
         <details className="border-b border-[var(--line)] px-3 py-3">
-          <summary className="cursor-pointer text-sm font-medium">Room theme · {session.room?.theme ?? 'cozy'}</summary>
+          <summary className="cursor-pointer text-sm font-medium">Room theme · {themePreview ?? session.room?.theme ?? 'cozy'}</summary>
           <div className="mt-3 flex flex-wrap gap-2">
             {(['cozy', 'arcade', 'space', 'beach'] as const).map(theme => (
               <button key={theme} type="button" disabled={!session.isHost}
-                onClick={() => { session.send({ t: 'theme', theme }); session.flush(); }}
+                onClick={() => { onThemePreview?.(theme); session.send({ t: 'theme', theme }); session.flush(); }}
                 aria-pressed={(session.room?.theme ?? 'cozy') === theme}
                 className={'rounded-lg border px-3 py-2 text-xs capitalize transition active:scale-95 '+
                   ((session.room?.theme ?? 'cozy') === theme ? 'border-[var(--accent)] bg-[var(--accent-soft)]' :
@@ -413,18 +408,6 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
           <p className="mt-2 text-xs text-[var(--fg-muted)]">{session.isHost ? 'Shared with everyone in this room. Only the host can change it.' : 'Shared with everyone. The host chooses the room theme.'}</p>
         </details>
         {session.me?.spectator && <p className="border-b border-[var(--line)] bg-sky-400/10 px-3 py-2 text-xs text-sky-300">Spectator mode: watch, chat, react, and listen with friends. Puzzle pieces are read-only.</p>}
-        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] p-3">
-          <button type="button" onClick={() => {
-            const url = window.location.origin + '/room/' + code + '?watch=1';
-            void copy(url, 'spectate').then(ok => { if (!ok) setInviteError(true); });
-          }} className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs transition hover:bg-[var(--surface-inset)] active:scale-95">
-            {copied === 'spectate' ? 'Spectator link copied' : 'Invite spectators'}
-          </button>
-          <span className="text-2xs text-[var(--fg-subtle)]">
-            {session.players.filter(p=>!p.spectator).length}/6 playing ·
-            {session.players.filter(p=>p.spectator).length} watching
-          </span>
-        </div>
         {session.me?.spectator && <div className="flex flex-wrap gap-1 border-b border-[var(--line)] p-2">
           <span className="self-center text-2xs text-[var(--fg-muted)]">Place a cheer</span>
           {['🌼','⭐','🦆'].map(symbol=><button key={symbol} type="button"

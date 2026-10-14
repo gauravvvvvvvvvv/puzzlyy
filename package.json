@@ -5,9 +5,10 @@
   "description": "Turn any picture into a puzzle. Solve it together with your favorite person.",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/fetch-ambience.mjs && next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "fetch:ambience": "node scripts/fetch-ambience.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
