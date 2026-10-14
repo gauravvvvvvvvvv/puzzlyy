@@ -9,7 +9,13 @@ let failures=0;
 function test(name,valid){console.log((valid?'PASS':'FAIL')+' '+name);if(!valid)failures++;}
 async function request(path,payload){
  const init=payload===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)};
- const res=await fetch(origin+path,init);
+ let res;
+ for (let retry=0;retry<8;retry++){
+   res=await fetch(origin+path,init);
+   if(res.status!==429)break;
+   // Multiple simulated players share one localhost IP: honor the real limiter.
+   await new Promise(resolve=>setTimeout(resolve,2400));
+ }
  let body;try{body=await res.json();}catch{body={};}
  return {status:res.status,body};
 }
