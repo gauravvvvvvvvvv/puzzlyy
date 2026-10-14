@@ -48,6 +48,25 @@ check('resume increments the durable sequence exactly once',
   afterResume.body.seq === beforeResume.body.seq + 1);
 
 
+// Solo hosts can start from the lobby without inviting a second player.
+const soloRoom = await api('/api/rooms', {
+  image: images[0], settings: { pieceCount: 25, rotation: false, blindMode: false },
+  gameType: 'jigsaw', hostCanForceStart: false,
+});
+const soloCode = soloRoom.body?.code;
+check('solo test room created', !!soloCode);
+if (soloCode) {
+  const soloPath = '/api/rooms/' + soloCode;
+  const soloSeat = await api(soloPath + '/join', { name: 'Solo', avatar: '⭐' });
+  const soloStart = await api(soloPath + '/events', {
+    playerId: soloSeat.body?.playerId, token: soloSeat.body?.token,
+    events: [{ t: 'ready', ready: true }, { t: 'start' }],
+  });
+  const soloState = await api(soloPath);
+  check('host can start alone without force-start setting',
+    soloStart.status === 200 && soloState.body?.view?.room?.status === 'playing');
+}
+
 const chat = await send(A, [{ t: 'chat', text: 'Hello, next puzzle?' }]);
 check('chat event accepted', chat.status === 200);
 const snapshot = await api(roomPath);
