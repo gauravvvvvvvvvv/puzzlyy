@@ -374,7 +374,6 @@ export function PuzzleBoard({
           overlay.appendChild(dot);
         }
       }
-      }
 
       // Cursors are built by hand: they change many times a second and must
       // never cause a render.
