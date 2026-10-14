@@ -454,7 +454,7 @@ export class PuzzleEngine {
    */
   movePiece(groupId: number, ox: number, oy: number, playerId?: string): boolean {
     const group = this.groups.get(groupId);
-    if (!group || this.isAnchored(groupId)) return false;
+    if (!group || (this.isAnchored(groupId) && !this.locks.has(groupId))) return false;
     if (playerId) {
       const holder = this.locks.get(groupId);
       if (holder && holder !== playerId) return false;
@@ -478,7 +478,7 @@ export class PuzzleEngine {
     playerId?: string,
   ): RotateResult | null {
     const group = this.groups.get(groupId);
-    if (!group || this.isAnchored(groupId)) return null;
+    if (!group || (this.isAnchored(groupId) && !this.locks.has(groupId))) return null;
     if (playerId) {
       const holder = this.locks.get(groupId);
       if (holder && holder !== playerId) return null;
@@ -574,7 +574,7 @@ export class PuzzleEngine {
       return { moved: null, merges: [], completed: false, straightened: null };
     }
     const before: Transform = { ox: group.ox, oy: group.oy, rot: group.rot };
-    if (this.isAnchored(groupId)) {
+    if (this.isAnchored(groupId) && !this.locks.has(groupId)) {
       return { moved: null, merges: [], completed: false, straightened: null };
     }
     this.movePiece(groupId, ox, oy, playerId);
