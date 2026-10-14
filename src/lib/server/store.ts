@@ -63,6 +63,8 @@ export interface SeatState {
   ready: boolean;
   joinedAt: number;
   lastSeenAt: number;
+  lastActiveAt?: number;
+  mediaActive?: boolean;
   /** Piece connections this player has made, for the results split. */
   connections: number;
   /** Secret bearer token. Never broadcast, never sent to another player. */

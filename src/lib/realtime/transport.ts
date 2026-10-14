@@ -80,6 +80,8 @@ export abstract class BaseTransport implements RealtimeTransport {
   /** Groups this client currently holds, so `alive` can refresh their locks. */
   private holding = new Set<number>();
   private lastCursorAt = 0;
+  private lastUserActionAt = Date.now();
+  private markUserAction = () => { this.lastUserActionAt = Date.now(); };
 
   constructor(config: TransportConfig) {
     this.config = config;
@@ -137,6 +139,9 @@ export abstract class BaseTransport implements RealtimeTransport {
     if (this.disposed) return;
     this.setStatus(this.state === 'idle' ? 'connecting' : this.state);
     this.startTimers();
+    if (typeof window !== 'undefined') {
+      for (const kind of ['pointerdown', 'keydown', 'touchstart', 'wheel']) window.addEventListener(kind, this.markUserAction, { passive: true });
+    }
     this.bindWindow();
     this.openChannel();
   }
@@ -154,6 +159,9 @@ export abstract class BaseTransport implements RealtimeTransport {
     beaconEvents(this.config.roomCode, this.config.playerId, this.config.token, farewell);
 
     this.stopTimers();
+    if (typeof window !== 'undefined') {
+      for (const kind of ['pointerdown', 'keydown', 'touchstart', 'wheel']) window.removeEventListener(kind, this.markUserAction);
+    }
     this.unbindWindow();
     this.closeChannel();
     this.setStatus('closed');
@@ -163,7 +171,7 @@ export abstract class BaseTransport implements RealtimeTransport {
     this.flushTimer ??= setInterval(() => void this.pump(), FLUSH_MS);
     this.aliveTimer ??= setInterval(() => {
       if (this.state !== 'connected') return;
-      this.send({ t: 'alive', holding: [...this.holding] });
+      this.send({ t: 'alive', holding: [...this.holding], active: Date.now() - this.lastUserActionAt < 30000 });
     }, ALIVE_MS);
   }
 

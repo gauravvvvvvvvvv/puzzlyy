@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { RoomSession } from '@/hooks/useRoomSession';
+import { Icon } from '@/components/ui/Icon';
 
 type Mode = { audio: boolean; video: boolean };
 type Remote = { playerId: string; stream: MediaStream };
@@ -37,7 +38,7 @@ function MediaTile({ stream, label, muted = false }: {
  * and puzzle changes. Voice/video permissions are requested only on click.
  * WebRTC carries the media; authenticated room events carry signaling.
  */
-export function RoomSocial({ session, code }: { session: RoomSession; code: string }) {
+export function RoomSocial({ session, code, onLeave }: { session: RoomSession; code: string; onLeave: () => void }) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [mode, setMode] = useState<Mode>(OFF);
@@ -300,15 +301,15 @@ export function RoomSocial({ session, code }: { session: RoomSession; code: stri
           <button type="button" onClick={() => setOpen(false)} className="rounded p-2 lg:hidden">Close</button>
         </header>
         <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] p-3">
-          <button type="button" disabled={busy} aria-pressed={mode.audio}
+          <button type="button" disabled={busy} aria-pressed={mode.audio} aria-label={mode.audio ? 'Mute microphone' : 'Join voice'} title={mode.audio ? 'Mute microphone' : 'Join voice'}
             onClick={() => void changeMode({ ...mode, audio: !mode.audio })}
             className={'min-h-11 flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ' + (mode.audio ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--fg)] ring-2 ring-[var(--accent)]/40' : 'border-[var(--line)] bg-[var(--surface-inset)] hover:border-[var(--accent)]')}>
-            {busy ? 'Connecting…' : mode.audio ? '● Voice on' : '🎙 Join voice'}
+            <Icon name={mode.audio ? 'mic' : 'mic-off'} size={22} />
           </button>
-          <button type="button" disabled={busy} aria-pressed={mode.video}
+          <button type="button" disabled={busy} aria-pressed={mode.video} aria-label={mode.video ? 'Stop camera' : 'Start camera'} title={mode.video ? 'Stop camera' : 'Start camera'}
             onClick={() => void changeMode({ ...mode, video: !mode.video })}
             className={'min-h-11 flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ' + (mode.video ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--fg)] ring-2 ring-[var(--accent)]/40' : 'border-[var(--line)] bg-[var(--surface-inset)] hover:border-[var(--accent)]')}>
-            {busy ? 'Connecting…' : mode.video ? '● Camera on' : '📷 Start video'}
+            <Icon name={mode.video ? 'video' : 'video-off'} size={22} />
           </button>
           {hasMedia && <span role="status" className="text-2xs text-[var(--fg-subtle)]">Media connected</span>}
           {(videoCount > 0 || hasMedia) && <button type="button" onClick={() => setCallExpanded(value => !value)} className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs transition hover:bg-[var(--surface-inset)] active:scale-95">{callExpanded ? 'Compact view' : 'Expand videos'}</button>}
@@ -334,7 +335,10 @@ export function RoomSocial({ session, code }: { session: RoomSession; code: stri
           {session.chat.map(entry => <div key={entry.id}
             className={'max-w-[95%] rounded-xl px-3 py-2 text-xs ' +
               (entry.playerId === session.myId ? 'ml-auto bg-[var(--accent-soft)]' : 'bg-[var(--surface-inset)]')}>
-            <p className="mb-1 font-semibold text-[var(--fg)]">{entry.name}</p>
+            <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2"><p className="font-semibold text-[var(--fg)]">{entry.name}</p>
+              <time dateTime={new Date(entry.createdAt).toISOString()} className="text-[10px] text-[var(--fg-subtle)]" title={new Date(entry.createdAt).toLocaleString()}>
+                {new Date(entry.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+              </time></div>
             <p className="break-words whitespace-pre-wrap text-[var(--fg-muted)]">{entry.text}</p>
           </div>)}
         </div>
@@ -353,6 +357,10 @@ export function RoomSocial({ session, code }: { session: RoomSession; code: stri
             </ul>
           </details>
         )}
+        <button type="button" onClick={onLeave}
+          className="mx-3 my-2 flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--line)] px-3 text-sm text-[var(--color-danger-400)] transition hover:bg-[var(--surface-inset)] active:scale-[0.98]">
+          <Icon name="arrow-left" size={18} /> Leave room
+        </button>
         <form onSubmit={sendMessage} className="flex gap-2 border-t border-[var(--line)] p-3">
           <input value={message} onChange={e => {
             setMessage(e.target.value);

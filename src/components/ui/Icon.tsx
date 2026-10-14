@@ -14,6 +14,10 @@
 import type { SVGProps } from 'react';
 
 export type IconName =
+  | 'mic'
+  | 'mic-off'
+  | 'video'
+  | 'video-off'
   | 'jigsaw'
   | 'scramble'
   | 'spot'
@@ -60,6 +64,10 @@ export type IconName =
 
 /** Paths are drawn on a 24×24 grid with a 1.7 stroke, so weights match. */
 const PATHS: Record<IconName, string> = {
+  mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM5 11a7 7 0 0 0 14 0M12 18v3M8 21h8',
+  'mic-off': 'M3 3l18 18M9 9v3a3 3 0 0 0 5 2M15 9V6a3 3 0 0 0-6-1M5 11a7 7 0 0 0 12 4M19 11a7 7 0 0 1-1 4M12 18v3M8 21h8',
+  video: 'M4 6h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2ZM17 10l5-3v10l-5-3',
+  'video-off': 'M3 3l18 18M4 6h11a2 2 0 0 1 2 2v2l5-3v10l-3-2M17 17a2 2 0 0 1-2 1H4a2 2 0 0 1-2-2V8',
   jigsaw:
     'M10 4.5h1.6a1.4 1.4 0 1 1 2.8 0H16a1.5 1.5 0 0 1 1.5 1.5v2.1a1.4 1.4 0 1 0 0 2.8V13a1.5 1.5 0 0 1-1.5 1.5h-2.1a1.4 1.4 0 1 1-2.8 0H8.5A1.5 1.5 0 0 1 7 13v-1.6a1.4 1.4 0 1 1 0-2.8V6A1.5 1.5 0 0 1 8.5 4.5H10Z M6 16.5h5a1.5 1.5 0 0 1 1.5 1.5v1.5H6a1.5 1.5 0 0 1-1.5-1.5v-1.5H6Z',
   scramble:
