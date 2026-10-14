@@ -39,6 +39,7 @@ type YouTubePlayer = {
   playVideo():void;
   pauseVideo():void;
   seekTo(seconds:number, ahead:boolean):void;
+  getVideoData?():{title?:string};
   destroy():void;
 };
 type YoutubeAPI = {Player:new(node:HTMLElement, settings:{
@@ -100,8 +101,11 @@ export function RoomJukebox({session}:{session:RoomSession}) {
   const [fallback,setFallback]=useState(false);
   const [pending,setPending]=useState('');
   const [expanded,setExpanded]=useState(true);
+  const [showVideo,setShowVideo]=useState(true);
+  const [resolvedTitle,setResolvedTitle]=useState('');
   const wrapper=useRef<HTMLDivElement>(null);
   const api=useRef<YouTubePlayer|null>(null);
+  const loadedTrack=useRef<string|null>(null);
   const isHostRef=useRef(session.isHost);
   const playingRef=useRef(music.playing);
   isHostRef.current=session.isHost;
@@ -112,24 +116,30 @@ export function RoomJukebox({session}:{session:RoomSession}) {
   latestMusic.current=music;
   const suppress=useRef(0);
 
-  const emit=useCallback((action:'play'|'pause'|'next'|'select'|'remove'|'seek',index?:number)=>{
+  const emit=useCallback((action:'play'|'pause'|'next'|'select'|'remove'|'clear'|'seek',index?:number)=>{
     setPending(action);
     sessionRef.current.send({t:'music',action,index});
     sessionRef.current.flush();
   },[]);
 
-  useEffect(()=>{ setPending(''); },[music.updatedAt,music.current,music.playing,music.queue.length]);
+  useEffect(()=>{setPending('');},[music.updatedAt,music.current,music.playing,music.queue.length]);
 
   const isYouTube=track?.provider==='youtube';
   const trackId=track?.id;
   const mediaId=track?.mediaId;
+  const playlist=!!mediaId&&(mediaId.startsWith('list:')||mediaId.startsWith('playlist:')||mediaId.startsWith('album:'));
+  const shownTitle=resolvedTitle&&track?.title==='YouTube selection'?resolvedTitle:track?.title;
 
+  // Keep ONE YouTube iframe/player mounted across queue changes, video
+  // minimization and jukebox collapse. Recreating it kills playback and
+  // loses the browser gesture that enabled subsequent tracks to play.
   useEffect(()=>{
-    if(!isYouTube||!mediaId||!wrapper.current||!expanded) return;
+    if(!isYouTube||!wrapper.current)return;
     let gone=false;
     setPlayerReady(false);
     setPlayerError('');
     setFallback(false);
+    loadedTrack.current=null;
     const host=wrapper.current;
     const element=document.createElement('div');
     element.style.width='100%';
@@ -142,97 +152,116 @@ export function RoomJukebox({session}:{session:RoomSession}) {
           width:'100%',height:'100%',
           playerVars:{playsinline:1,controls:1,rel:0,origin:window.location.origin,enablejsapi:1},
           events:{
-            onReady:()=>{
-              if(gone)return;
-              setPlayerReady(true);
-              const state=latestMusic.current;
-              const seconds=timeAt(state.position,state.updatedAt,state.playing);
-              try {
-                if(mediaId.startsWith('list:')) next.cuePlaylist({list:mediaId.slice(5),listType:'playlist',startSeconds:seconds});
-                else next.cueVideoById(mediaId,seconds);
-              } catch {setPlayerError('Could not cue video. Use the direct video link.');}
-            },
+            onReady:()=>{if(!gone)setPlayerReady(true);},
             onError:(event)=>{
               if(gone)return;
               const reason=event.data===101||event.data===150?'This video blocks embedding.':event.data===100?'Video is unavailable.':'Video playback failed.';
-              setPlayerError(reason+' You can open it on YouTube.');
+              setPlayerError(reason+' Open it on YouTube to listen.');
               setFallback(true);
             },
             onAutoplayBlocked:()=>{
-              if(!gone)setPlayerError('Autoplay blocked. Tap Play here or use the controls in the video.');
+              if(!gone)setPlayerError('Autoplay blocked. Press Play here or tap the video player.');
             },
             onStateChange:(event)=>{
-              if(gone||!isHostRef.current||Date.now()<suppress.current) return;
-              if(event.data===1&&!playingRef.current) emit('play');
-              if(event.data===2&&playingRef.current) emit('pause');
+              if(gone)return;
+              if(event.data===1) {
+                try {const name=next.getVideoData?.().title;if(name)setResolvedTitle(name);}catch{}
+              }
+              if(!isHostRef.current||Date.now()<suppress.current)return;
+              if(event.data===0) {
+                // Advance the shared queue when a video or full playlist finishes.
+                if(latestMusic.current.queue.length>1)emit('next');
+                else emit('pause');
+              } else if(event.data===1&&!playingRef.current)emit('play');
+              else if(event.data===2&&playingRef.current)emit('pause');
             },
           },
         });
         api.current=next;
       } catch {
-        if(!gone){setFallback(true);setPlayerError('Interactive player failed. Use the built-in video player below.');}
+        if(!gone){setFallback(true);setPlayerError('YouTube player failed to initialize. Use the fallback player.');}
       }
     }).catch(()=>{
-      if(!gone){setFallback(true);setPlayerError('YouTube API unavailable. Use the built-in video player below.');}
+      if(!gone){setFallback(true);setPlayerError('YouTube API unavailable. Use the fallback player.');}
     });
     return()=>{
       gone=true;
-      setPlayerReady(false);
+      loadedTrack.current=null;
       try{api.current?.destroy();}catch{}
       api.current=null;
       host.replaceChildren();
     };
-  },[trackId,mediaId,isYouTube,expanded,emit]);
+  },[isYouTube,emit]);
 
-  // Script loading may succeed while an embedded video itself never becomes
-  // ready (blocked privacy extensions, provider errors, or restricted networks).
-  // Never strand the user on a perpetual spinner.
-  useEffect(() => {
-    if (!isYouTube || playerReady || fallback || !expanded) return;
-    const timeout = window.setTimeout(() => {
-      setFallback(true);
-      setPlayerError('Embedded player timed out. Try the fallback or open YouTube.');
-    }, 11000);
-    return () => window.clearTimeout(timeout);
-  }, [isYouTube, playerReady, fallback, expanded, trackId]);
-
-  // Apply authoritative track position on track changes and host commands, not
-  // on every rendering frame. Do not issue autoplay repeatedly.
+  // The player stays mounted when switching songs. Loading the next ID into
+  // the existing player supports continuous queue/playlist playback.
   useEffect(()=>{
     const player=api.current;
-    if(!player||!playerReady||!isYouTube||!mediaId)return;
+    if(!isYouTube||!player||!playerReady||!trackId||!mediaId||loadedTrack.current===trackId)return;
+    const seconds=timeAt(music.position,music.updatedAt,music.playing);
+    loadedTrack.current=trackId;
+    suppress.current=Date.now()+1200;
+    setResolvedTitle('');
+    setFallback(false);
+    setPlayerError('');
+    try {
+      if(mediaId.startsWith('list:')) {
+        const options={list:mediaId.slice(5),listType:'playlist',startSeconds:seconds};
+        if(music.playing)player.loadPlaylist(options);
+        else player.cuePlaylist(options);
+      } else if(music.playing)player.loadVideoById(mediaId,seconds);
+      else player.cueVideoById(mediaId,seconds);
+    } catch {
+      loadedTrack.current=null;
+      setPlayerError('Could not load this selection. Open it on YouTube instead.');
+      setFallback(true);
+    }
+  },[isYouTube,playerReady,trackId,mediaId,music.position,music.updatedAt,music.playing]);
+
+  useEffect(()=>{
+    if(!isYouTube||playerReady||fallback)return;
+    const timeout=window.setTimeout(()=>{
+      setFallback(true);
+      setPlayerError('YouTube player timed out. Try the fallback or open YouTube.');
+    },11000);
+    return()=>window.clearTimeout(timeout);
+  },[isYouTube,playerReady,fallback,trackId]);
+
+  // Sync room commands without forcing autoplay after every network update.
+  useEffect(()=>{
+    const player=api.current;
+    if(!player||!playerReady||!isYouTube||!trackId||loadedTrack.current!==trackId||fallback)return;
     const current=timeAt(music.position,music.updatedAt,music.playing);
     try {
       suppress.current=Date.now()+950;
-      if(Math.abs(player.getCurrentTime()-current)>4) player.seekTo(current,true);
-      if(!music.playing) player.pauseVideo();
-      // Playback is not forced here: browsers require a fresh local click.
+      if(Math.abs(player.getCurrentTime()-current)>4)player.seekTo(current,true);
+      if(!music.playing)player.pauseVideo();
     }catch{}
-  },[music.current,music.updatedAt,music.position,music.playing,playerReady,isYouTube,mediaId]);
+  },[music.current,music.updatedAt,music.position,music.playing,playerReady,isYouTube,trackId,fallback]);
 
   const playLocal=(play:boolean)=>{
     const player=api.current;
-    if(!player||!playerReady){
-      setPlayerError('Player is still loading. Use the video controls or open the video directly.');
+    if(!player||!playerReady||fallback){
+      setPlayerError('Player is unavailable. Try the provider controls or open the selection directly.');
       return;
     }
     try {
       suppress.current=Date.now()+700;
       if(play)player.playVideo();else player.pauseVideo();
       setPlayerError('');
-    }catch {setPlayerError('Playback failed here. Try the video controls or open YouTube.');}
+    }catch{setPlayerError('Playback failed. Use the video controls or open YouTube.');}
   };
 
   const hostAction=(action:'play'|'pause'|'next')=>{
-    if(track?.provider==='youtube' && action==='play')playLocal(true);
-    else if(track?.provider==='youtube' && action==='pause')playLocal(false);
+    if(isYouTube&&action==='play')playLocal(true);
+    else if(isYouTube&&action==='pause')playLocal(false);
     emit(action);
   };
   const add=(e:FormEvent<HTMLFormElement>)=>{
     e.preventDefault();
     const parsed=parseMusicLink(url);
     if(!parsed){setError('Paste a valid YouTube video/playlist or Spotify track, album or playlist link.');return;}
-    if(music.queue.length>=40){setError('Queue is full (40 tracks).');return;}
+    if(music.queue.length>=40){setError('Queue is full (40 entries).');return;}
     setError('');
     setPending('add');
     session.send({t:'music',action:'add',track:{
@@ -240,82 +269,129 @@ export function RoomJukebox({session}:{session:RoomSession}) {
       title:title.trim().slice(0,90)||(parsed.provider==='spotify'?'Spotify selection':'YouTube selection'),addedBy:'',
     }});
     session.flush();
-    setUrl('');setTitle('');
+    setUrl('');
+    setTitle('');
     setExpanded(true);
   };
 
   const spotify=track?.provider==='spotify'?track.mediaId.split(':'):null;
   const input='min-h-10 w-full rounded-lg border border-[var(--line)] bg-[var(--surface-inset)] px-3 text-xs outline-none focus:border-[var(--accent)]';
-  return <details open={expanded} onToggle={event=>setExpanded(event.currentTarget.open)}
-    className="min-w-0 border-b border-[var(--line)] px-3 py-2">
-    <summary className="cursor-pointer text-sm font-semibold">Jukebox · {music.queue.length} queued {pending&&<span className="ml-1 text-2xs font-normal text-[var(--fg-muted)]">Syncing…</span>}</summary>
-    <div className="mt-3 min-w-0 space-y-3">
-      {track ? <section className="min-w-0 overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-inset)]">
-        <div className="flex min-w-0 items-center justify-between gap-2 px-3 py-2">
-          <div className="min-w-0">
-            <p className="truncate text-xs font-semibold">{track.title}</p>
-            <p className="truncate text-2xs text-[var(--fg-muted)]">{track.provider==='youtube'?'YouTube':'Spotify'} · {track.addedBy}</p>
-          </div>
-          {session.isHost&&<span className="shrink-0 text-2xs text-[var(--fg-muted)]">{music.playing?'Room playing':'Room paused'}</span>}
+  const playerDock=showVideo
+    ? 'min-w-0 border-t border-[var(--line)]'
+    : 'fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-3 z-[65] w-[min(92vw,280px)] overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)] shadow-2xl';
+  return <section className="min-w-0 border-b border-[var(--line)] px-3 py-2">
+    <button type="button" aria-expanded={expanded} aria-controls="jukebox-controls"
+      onClick={()=>setExpanded(value=>!value)}
+      className="flex min-h-9 w-full min-w-0 items-center justify-between gap-2 text-left text-sm font-semibold">
+      <span className="truncate">Jukebox · {music.queue.length} queued {pending&&<span className="text-2xs font-normal text-[var(--fg-muted)]">Syncing…</span>}</span>
+      <span aria-hidden="true">{expanded?'▾':'▸'}</span>
+    </button>
+    {track&&<section className="mt-2 min-w-0 overflow-visible rounded-xl border border-[var(--line)] bg-[var(--surface-inset)]">
+      <div className="flex min-w-0 items-center justify-between gap-2 p-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-semibold" title={shownTitle}>{shownTitle}</p>
+          <p className="truncate text-2xs text-[var(--fg-muted)]">
+            {track.provider==='youtube'?'YouTube':'Spotify'} · {playlist?'Playlist / album · ':''}{track.addedBy}
+          </p>
         </div>
-        {isYouTube&&<>
-          <div className="relative aspect-video min-h-44 w-full overflow-hidden bg-black">
-            <div ref={wrapper} className={fallback?'hidden':'h-full w-full [&_iframe]:h-full [&_iframe]:w-full'}/>
-            {fallback&&<iframe title="YouTube video (fallback player)" className="absolute inset-0 h-full w-full"
-              src={mediaId?.startsWith('list:')
-                ? 'https://www.youtube-nocookie.com/embed/videoseries?list='+encodeURIComponent(mediaId.slice(5))
-                : 'https://www.youtube-nocookie.com/embed/'+encodeURIComponent(mediaId??'')+'?playsinline=1&controls=1'}
-              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-              referrerPolicy="strict-origin-when-cross-origin" allowFullScreen/>}
-            {!playerReady&&!fallback&&<div className="pointer-events-none absolute inset-0 grid place-items-center text-xs text-white/80">Loading YouTube player…</div>}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-            <button type="button" onClick={()=>playLocal(true)} disabled={!playerReady||fallback}
-              className="min-h-9 rounded-lg bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-fg)] disabled:opacity-50">Play here</button>
-            <button type="button" onClick={()=>playLocal(false)} disabled={!playerReady||fallback}
-              className="min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs disabled:opacity-50">Pause here</button>
-            <a target="_blank" rel="noopener noreferrer" href={youtubeHref(mediaId??'')}
-              className="ml-auto text-xs underline underline-offset-2">Open on YouTube ↗</a>
-          </div>
-          {playerError&&<p role="alert" className="px-3 pb-2 text-xs text-amber-300">{playerError}</p>}
-          <p className="px-3 pb-2 text-2xs text-[var(--fg-muted)]">Each listener may need to press Play locally. Some videos cannot be embedded.</p>
-        </>}
-        {spotify&&<>
-          <iframe key={track.id} title={'Spotify: '+track.title} loading="eager"
-            src={'https://open.spotify.com/embed/'+encodeURIComponent(spotify[0])+'/'+encodeURIComponent(spotify[1])}
-            className="block h-[152px] w-full border-0" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"/>
-          <div className="flex items-center gap-2 px-3 py-2 text-xs">
-            <a href={spotifyHref(track.mediaId)} target="_blank" rel="noopener noreferrer"
-              className="underline underline-offset-2">Open in Spotify ↗</a>
-            <span className="ml-auto text-2xs text-[var(--fg-muted)]">Play locally</span>
-          </div>
-        </>}
-        {session.isHost&&<div className="flex gap-2 border-t border-[var(--line)] px-3 py-2">
-          <button type="button" onClick={()=>hostAction(music.playing?'pause':'play')} className="min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs">
-            {music.playing?'Pause room':'Play room'}
-          </button>
-          <button type="button" onClick={()=>hostAction('next')} className="min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs">Next track</button>
+        {session.isHost&&<span className="shrink-0 text-2xs text-[var(--fg-muted)]">{music.playing?'Room playing':'Room paused'}</span>}
+      </div>
+      <div className="flex flex-wrap gap-2 border-t border-[var(--line)] px-3 py-2">
+        <button type="button" onClick={()=>setShowVideo(value=>!value)}
+          aria-label={showVideo?'Minimize video to a floating player':'Return player to jukebox'}
+          className="min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs hover:bg-[var(--surface-2)]">
+          {showVideo?'Minimize player':'Expand player'}
+        </button>
+        {session.isHost&&<button type="button" onClick={()=>emit('remove',music.current)}
+          className="min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs text-[var(--color-danger-400)] hover:bg-[var(--surface-2)]">
+          Remove {playlist?'playlist':'song'}
+        </button>}
+      </div>
+      {isYouTube&&<div className={playerDock}>
+        {!showVideo&&<div className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+          <span className="min-w-0 truncate font-semibold">{shownTitle}</span>
+          <button type="button" onClick={()=>setShowVideo(true)} aria-label="Expand YouTube player"
+            className="shrink-0 rounded px-2 py-1 underline underline-offset-2">Expand</button>
         </div>}
-      </section>:<p className="text-xs text-[var(--fg-muted)]">Queue something to listen together.</p>}
-      {music.queue.length>1&&<ol className="max-h-36 space-y-1 overflow-y-auto overscroll-contain">
-        {music.queue.map((item,i)=><li key={item.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-[var(--surface-inset)] px-2 py-1 text-xs">
-          <span className="shrink-0 text-[var(--fg-subtle)]">{i+1}.</span>
-          <span className={'min-w-0 flex-1 truncate '+(i===music.current?'font-semibold':'')}>{item.title}</span>
-          {session.isHost&&<button type="button" onClick={()=>emit('select',i)} className="min-h-8 rounded px-2 hover:bg-[var(--surface-2)]">Play</button>}
-          {session.isHost&&<button type="button" onClick={()=>emit('remove',i)} aria-label={'Remove '+item.title} className="min-h-8 rounded px-2 hover:bg-[var(--surface-2)]">×</button>}
-        </li>)}
+        <div className={'relative w-full overflow-hidden bg-black '+(showVideo?'aspect-video min-h-[200px]':'h-[200px]')}>
+          <div ref={wrapper} className={fallback?'hidden':'h-full w-full [&_iframe]:h-full [&_iframe]:w-full'}/>
+          {fallback&&<iframe title="YouTube fallback player" className="absolute inset-0 h-full w-full"
+            src={mediaId?.startsWith('list:')
+              ? 'https://www.youtube-nocookie.com/embed/videoseries?list='+encodeURIComponent(mediaId.slice(5))
+              : 'https://www.youtube-nocookie.com/embed/'+encodeURIComponent(mediaId??'')+'?playsinline=1&controls=1'}
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            referrerPolicy="strict-origin-when-cross-origin" allowFullScreen/>}
+          {!playerReady&&!fallback&&<div className="pointer-events-none absolute inset-0 grid place-items-center text-xs text-white/80">Loading YouTube…</div>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 px-2 py-2">
+          <button type="button" onClick={()=>playLocal(true)} disabled={!playerReady||fallback}
+            className="min-h-9 rounded-lg bg-[var(--accent)] px-3 text-xs font-semibold text-[var(--accent-fg)] disabled:opacity-50">Play here</button>
+          <button type="button" onClick={()=>playLocal(false)} disabled={!playerReady||fallback}
+            className="min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs disabled:opacity-50">Pause</button>
+          <a target="_blank" rel="noopener noreferrer" href={youtubeHref(mediaId??'')}
+            className="ml-auto text-xs underline underline-offset-2">YouTube ↗</a>
+        </div>
+        {playerError&&<p role="alert" className="px-3 pb-2 text-xs text-amber-300">{playerError}</p>}
+      </div>}
+      {spotify&&<div className={playerDock}>
+        {!showVideo&&<div className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+          <span className="min-w-0 truncate font-semibold">{shownTitle}</span>
+          <button type="button" onClick={()=>setShowVideo(true)} aria-label="Expand Spotify player"
+            className="shrink-0 rounded px-2 py-1 underline underline-offset-2">Expand</button>
+        </div>}
+        <iframe key={track.id} title={'Spotify: '+track.title} loading="eager"
+          src={'https://open.spotify.com/embed/'+encodeURIComponent(spotify[0])+'/'+encodeURIComponent(spotify[1])}
+          className="block h-[152px] w-full border-0"
+          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"/>
+        <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+          <span className="text-[var(--fg-muted)]">Play through Spotify</span>
+          <a href={spotifyHref(track.mediaId)} target="_blank" rel="noopener noreferrer"
+            className="underline underline-offset-2">Open ↗</a>
+        </div>
+      </div>}
+      {session.isHost&&<div className="flex flex-wrap gap-2 border-t border-[var(--line)] px-3 py-2">
+        <button type="button" onClick={()=>hostAction(music.playing?'pause':'play')}
+          className="min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs">{music.playing?'Pause room':'Play room'}</button>
+        <button type="button" onClick={()=>hostAction('next')}
+          className="min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs">Next track</button>
+      </div>}
+    </section>}
+    {expanded&&<div id="jukebox-controls" className="mt-3 min-w-0 space-y-3">
+      {music.queue.length>0&&<div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold">Up next · {music.queue.length} entries</span>
+        {session.isHost&&<button type="button" onClick={()=>emit('clear')}
+          className="min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs text-[var(--color-danger-400)] hover:bg-[var(--surface-2)]">Clear queue</button>}
+      </div>}
+      {music.queue.length>0&&<ol className="max-h-48 space-y-1 overflow-y-auto overscroll-contain">
+        {music.queue.map((item,i)=>{
+          const isList=item.mediaId.startsWith('list:')||item.mediaId.startsWith('playlist:')||item.mediaId.startsWith('album:');
+          return <li key={item.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-[var(--surface-inset)] px-2 py-1.5 text-xs">
+            <span className="shrink-0 text-[var(--fg-subtle)]">{i+1}.</span>
+            <span className={'min-w-0 flex-1 truncate '+(i===music.current?'font-semibold':'')} title={item.title}>
+              {i===music.current&&resolvedTitle&&item.title==='YouTube selection'?resolvedTitle:item.title}
+              <span className="ml-1 text-2xs font-normal text-[var(--fg-muted)]">· {isList?'Playlist':'Song'}</span>
+            </span>
+            {session.isHost&&<button type="button" onClick={()=>emit('select',i)} disabled={i===music.current}
+              aria-label={'Play '+item.title} className="min-h-9 rounded px-2 hover:bg-[var(--surface-2)] disabled:opacity-40">Play</button>}
+            {session.isHost&&<button type="button" onClick={()=>emit('remove',i)}
+              aria-label={'Remove '+(isList?'playlist ':'song ')+item.title}
+              className="min-h-9 rounded border border-[var(--line)] px-2 hover:bg-[var(--surface-2)]">Remove</button>}
+          </li>;
+        })}
       </ol>}
+      {!track&&<p className="text-xs text-[var(--fg-muted)]">Add a song or playlist to start listening together.</p>}
       <details className="rounded-lg border border-[var(--line)] px-3 py-2">
         <summary className="cursor-pointer text-xs font-medium">Add music</summary>
         <form onSubmit={add} className="mt-3 space-y-2">
           <input required className={input} value={url} onChange={e=>setUrl(e.target.value)}
             placeholder="Paste YouTube / Spotify URL" aria-label="Music URL" inputMode="url"/>
           <input className={input} value={title} onChange={e=>setTitle(e.target.value)}
-            placeholder="Track title (optional)" aria-label="Track title"/>
+            placeholder="Song or playlist title (optional)" aria-label="Music title"/>
           <button type="submit" className="min-h-10 rounded-lg bg-[var(--accent)] px-4 text-xs font-semibold text-[var(--accent-fg)]">Add to queue</button>
           {error&&<p role="alert" className="text-xs text-rose-400">{error}</p>}
         </form>
       </details>
-    </div>
-  </details>;
+      <p className="text-2xs text-[var(--fg-muted)]">Playback stays active when the queue closes or the player is minimized. YouTube requires a visible mini-player; Spotify needs a local play action and Premium authentication for a fully custom player.</p>
+    </div>}
+  </section>;
 }
