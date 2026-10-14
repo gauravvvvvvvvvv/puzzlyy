@@ -307,10 +307,16 @@ ok('events without credentials are refused', noSeat.status === 401, `status=${no
 
 let lastJoin = null;
 for (let i = 0; i < 6; i += 1) {
-  lastJoin = await call(`/api/rooms/${code}/join`, {
-    method: 'POST',
-    body: JSON.stringify({ name: `Extra${i}`, avatar: '🐛' }),
-  });
+  for (let retry = 0; retry < 5; retry++) {
+    lastJoin = await call(`/api/rooms/${code}/join`, {
+      method: 'POST',
+      body: JSON.stringify({ name: `Extra${i}`, avatar: '🐛' }),
+    });
+    if (lastJoin.status !== 429) break;
+    // The smoke suite deliberately joins more users from one IP than the
+    // production burst limiter allows. Respect the limiter, do not disable it.
+    await new Promise(resolve => setTimeout(resolve, 2300));
+  }
   if (lastJoin.status !== 200) break;
 }
 ok('a full room admits spectators without a puzzle seat', lastJoin.status === 200 &&
