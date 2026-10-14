@@ -30,10 +30,10 @@ export function saveScrapbookPage(result: SessionResult) {
   try { localStorage.setItem(STORE,JSON.stringify([page,...saved].slice(0,MAX_PAGES))); } catch { /* storage may be disabled */ }
 }
 
-export function FriendshipScrapbook() {
+export function FriendshipScrapbook({ latest }: { latest: SessionResult }) {
   const [pages,setPages] = useState<Page[]>([]);
   const [open,setOpen] = useState(false);
-  useEffect(() => { setPages(load()); }, []);
+  useEffect(() => { saveScrapbookPage(latest); setPages(load()); }, [latest]);
   if (!pages.length) return null;
   return <section className="card p-4">
     <button type="button" onClick={() => setOpen(o => !o)}
