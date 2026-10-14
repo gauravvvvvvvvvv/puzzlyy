@@ -61,6 +61,29 @@ await send(viewerSeat,[{t:'theme',theme:'arcade'},{t:'music',action:'play'}]);
 room=await request(path);
 test('spectator cannot change host theme or media controls',room.body.view?.room?.theme==='space'&&
  room.body.view?.music?.playing===false);
+// Queue operations must be host-only and preserve the playing selection when an
+// earlier song is removed. Each playlist is represented by one queue entry.
+await send(host,[{t:'music',action:'add',track:{id:'',provider:'youtube',mediaId:'jNQXAC9IVRw',title:'Second song',addedBy:''}}]);
+await send(host,[{t:'music',action:'add',track:{id:'',provider:'youtube',mediaId:'list:PL1234567890',title:'Playlist',addedBy:''}}]);
+await send(host,[{t:'music',action:'select',index:2},{t:'music',action:'seek',position:35},{t:'music',action:'play'}]);
+room=await request(path);
+const selectedId=room.body.view?.music?.queue?.[2]?.id;
+test('playlist entries can be queued and selected',room.body.view?.music?.queue?.length===3&&
+ room.body.view?.music?.current===2&&room.body.view?.music?.playing===true);
+await send(host,[{t:'music',action:'remove',index:0}]);
+room=await request(path);
+test('removing an earlier song preserves the playing playlist and its position',
+ room.body.view?.music?.queue?.length===2&&room.body.view?.music?.queue?.[1]?.id===selectedId&&
+ room.body.view?.music?.current===1&&room.body.view?.music?.playing===true&&
+ room.body.view?.music?.position>=35);
+await send(viewerSeat,[{t:'music',action:'clear'}]);
+room=await request(path);
+test('non-host cannot clear queue',room.body.view?.music?.queue?.length===2);
+await send(host,[{t:'music',action:'clear'}]);
+room=await request(path);
+test('host can remove songs and playlists by clearing queue',
+ room.body.view?.music?.queue?.length===0&&room.body.view?.music?.current===0&&
+ room.body.view?.music?.playing===false&&room.body.view?.music?.position===0);
 for(const seat of seats)await send(seat,[{t:'ready',ready:true}]);
 room=await request(path);
 test('six players may start while spectators watch',room.body.view?.room?.status==='playing');
