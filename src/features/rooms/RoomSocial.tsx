@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { RoomSession } from '@/hooks/useRoomSession';
 import { Icon } from '@/components/ui/Icon';
+import { useClipboard } from '@/hooks/useClipboard';
 
 type Mode = { audio: boolean; video: boolean };
 type Remote = { playerId: string; stream: MediaStream };
@@ -41,6 +42,18 @@ function MediaTile({ stream, label, muted = false }: {
 export function RoomSocial({ session, code, onLeave }: { session: RoomSession; code: string; onLeave: () => void }) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
+  const { copied, copy, share, canShare } = useClipboard();
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [inviteError, setInviteError] = useState(false);
+  useEffect(() => { setInviteUrl(`${window.location.origin}/room/${code}`); }, [code]);
+  const invite = useCallback(async () => {
+    if (!inviteUrl) return;
+    setInviteError(false);
+    const ok = canShare
+      ? await share({ title: 'Puzzly', text: 'Come solve this puzzle with me.', url: inviteUrl }, 'invite')
+      : await copy(inviteUrl, 'invite');
+    if (!ok && !canShare) setInviteError(true);
+  }, [canShare, copy, share, inviteUrl]);
   const [mode, setMode] = useState<Mode>(OFF);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -300,21 +313,52 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
           </div>
           <button type="button" onClick={() => setOpen(false)} className="rounded p-2 lg:hidden">Close</button>
         </header>
-        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] p-3">
-          <button type="button" disabled={busy} aria-label={mode.audio ? "Mute microphone" : "Enable microphone"} title={mode.audio ? "Mute microphone" : "Enable microphone"} aria-pressed={mode.audio}
-            onClick={() => void changeMode({ ...mode, audio: !mode.audio })}
-            className={'min-h-11 flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ' + (mode.audio ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--fg)] ring-2 ring-[var(--accent)]/40' : 'border-[var(--line)] bg-[var(--surface-inset)] hover:border-[var(--accent)]')}>
-            <Icon name={mode.audio ? 'mic-off' : 'mic'} size={22} />
-          </button>
-          <button type="button" disabled={busy} aria-label={mode.video ? "Stop camera" : "Enable camera"} title={mode.video ? "Stop camera" : "Enable camera"} aria-pressed={mode.video}
-            onClick={() => void changeMode({ ...mode, video: !mode.video })}
-            className={'min-h-11 flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] ' + (mode.video ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--fg)] ring-2 ring-[var(--accent)]/40' : 'border-[var(--line)] bg-[var(--surface-inset)] hover:border-[var(--accent)]')}>
-            <Icon name={mode.video ? 'video-off' : 'video'} size={22} />
-          </button>
-          {busy && <span role="status" className="text-2xs text-[var(--fg-subtle)]">Connecting…</span>}
-          {hasMedia && <span role="status" className="text-2xs text-[var(--fg-subtle)]">Call on</span>}
-          {(videoCount > 0 || hasMedia) && <button type="button" onClick={() => setCallExpanded(value => !value)} className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs transition hover:bg-[var(--surface-inset)] active:scale-95">{callExpanded ? 'Compact view' : 'Expand videos'}</button>}
+        <div className="flex flex-col gap-2 border-b border-[var(--line)] px-3 py-3">
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => void invite()} disabled={!inviteUrl}
+              className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--line-strong)] bg-[var(--surface-inset)] px-3 text-xs font-semibold transition hover:border-[var(--accent)] hover:bg-[var(--surface-2)] active:scale-95 disabled:opacity-50">
+              <Icon name={copied === 'invite' ? 'check' : 'share'} size={18} />
+              {copied === 'invite' ? 'Invite copied' : canShare ? 'Share invite' : 'Copy invite link'}
+            </button>
+            <code className="max-w-[7rem] truncate text-xs text-[var(--fg-subtle)]" title={inviteUrl}>{code}</code>
+          </div>
+          {inviteError && <p className="break-all text-xs text-[var(--fg-muted)]">Copy this link: {inviteUrl}</p>}
         </div>
+        <div className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
+          <span className="mr-auto text-xs font-medium text-[var(--fg-muted)]">Voice &amp; video</span>
+          <div className="flex items-center gap-2" role="group" aria-label="Call controls">
+            <button type="button" disabled={busy}
+              aria-label={mode.audio ? 'Turn microphone off' : 'Turn microphone on'}
+              title={mode.audio ? 'Turn microphone off' : 'Turn microphone on'}
+              aria-pressed={mode.audio}
+              onClick={() => void changeMode({ ...mode, audio: !mode.audio })}
+              className={'grid size-11 shrink-0 place-items-center rounded-full border transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-wait disabled:opacity-60 ' +
+                (mode.audio ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' :
+                  'border-[var(--line-strong)] bg-[var(--surface-inset)] text-[var(--fg)] hover:border-[var(--accent)]')}>
+              <Icon name={mode.audio ? 'mic' : 'mic-off'} size={20} />
+            </button>
+            <button type="button" disabled={busy}
+              aria-label={mode.video ? 'Turn camera off' : 'Turn camera on'}
+              title={mode.video ? 'Turn camera off' : 'Turn camera on'}
+              aria-pressed={mode.video}
+              onClick={() => void changeMode({ ...mode, video: !mode.video })}
+              className={'grid size-11 shrink-0 place-items-center rounded-full border transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md active:scale-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] disabled:cursor-wait disabled:opacity-60 ' +
+                (mode.video ? 'border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-fg)] shadow-sm' :
+                  'border-[var(--line-strong)] bg-[var(--surface-inset)] text-[var(--fg)] hover:border-[var(--accent)]')}>
+              <Icon name={mode.video ? 'video' : 'video-off'} size={20} />
+            </button>
+          </div>
+        </div>
+        {(busy || hasMedia) && (
+          <div role="status" className="flex items-center gap-2 border-b border-[var(--line)] px-4 py-2 text-xs text-[var(--fg-muted)]">
+            <span className={'size-1.5 rounded-full ' + (busy ? 'animate-pulse bg-amber-400' : 'bg-emerald-400')} />
+            {busy ? 'Connecting devices…' : mode.video ? 'Camera enabled' : 'Microphone enabled'}
+            {(videoCount > 0 || hasMedia) && <button type="button" onClick={() => setCallExpanded(value => !value)}
+              className="ml-auto rounded-lg px-2 py-1 text-xs font-medium text-[var(--fg)] transition hover:bg-[var(--surface-inset)] active:scale-95">
+              {callExpanded ? 'Compact' : 'Expand call'}
+            </button>}
+          </div>
+        )}
         {error && <p role="alert" className="px-3 pt-2 text-xs text-red-500">{error}</p>}
         {(preview || remote.length > 0) && (
           <div className={(callExpanded ? 'fixed inset-3 z-[60] max-h-[calc(100dvh-1.5rem)] rounded-xl border bg-[var(--surface)] p-3 shadow-2xl sm:inset-[5vh_5vw] ' : 'max-h-[min(40dvh,330px)] border-b p-2 ') + 'overflow-auto border-[var(--line)]'}>
@@ -330,7 +374,7 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
           </div>
         )}
         <div ref={pane} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3" aria-label="Room messages" role="log">
-          {session.chat.length === 0 && <p className="text-center text-xs text-[var(--fg-muted)]">
+          {session.chat.length === 0 && <p className="mx-auto max-w-[16rem] py-8 text-center text-xs leading-relaxed text-[var(--fg-muted)]">
             Your conversation stays here when you play the next puzzle.
           </p>}
           {session.chat.map(entry => <div key={entry.id}
