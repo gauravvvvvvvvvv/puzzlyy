@@ -142,7 +142,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
           </button>
         )}
       </main>
-      <RoomSocial session={session} code={code} />
+      <RoomSocial session={session} code={code} onLeave={leave} />
     </div>
   );
 

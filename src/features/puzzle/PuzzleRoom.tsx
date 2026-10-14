@@ -43,7 +43,7 @@ export interface PuzzleRoomProps {
 }
 
 /** Long enough that the button cannot be machine-gunned, short enough to feel free. */
-const HINT_COOLDOWN_MS = 1200;
+const HINT_COOLDOWN_MS = 250;
 
 export function PuzzleRoom({
   session,
@@ -120,9 +120,9 @@ export function PuzzleRoom({
 
   const react = useCallback(
     (emoji: string) => {
-      send({ t: 'react', emoji, x: pointerRef.current.x, y: pointerRef.current.y });
+      session.reactNow(emoji, pointerRef.current.x, pointerRef.current.y);
     },
-    [send],
+    [session.reactNow],
   );
 
   /**
@@ -162,7 +162,8 @@ export function PuzzleRoom({
     const mine = live && live.playerId === myId ? live.level : 0;
     const level = Math.min(4, mine + 1) as 1 | 2 | 3 | 4;
     send({ t: 'hint', level });
-  }, [myId, send, session.hint]);
+    session.flush();
+  }, [myId, send, session.flush, session.hint]);
 
   const undo = useCallback(() => {
     send({ t: 'undo' });
@@ -321,9 +322,7 @@ export function PuzzleRoom({
 
         <ConnectionBadge status={connection} className="shrink-0" />
 
-        <IconButton label="Leave the room" compact onClick={onLeave} className="shrink-0">
-          <Icon name="close" size={17} />
-        </IconButton>
+
       </header>
 
       {/* ---- board ------------------------------------------------------- */}

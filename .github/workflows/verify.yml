@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,3 +33,23 @@ jobs:
           node scripts/smoke-social.mjs http://127.0.0.1:3000
           node scripts/smoke.mjs http://127.0.0.1:3000
           node scripts/smoke-edge.mjs http://127.0.0.1:3000
+
+      - name: Test desktop/mobile browser interactions
+        run: |
+          npm install --no-save --no-package-lock playwright
+          npx playwright install --with-deps chromium
+          # The earlier dev server competes with Chromium for CPU and memory.
+          # Shut it down and serve the already-validated production build.
+          fuser -k 3000/tcp || true
+          npm run start -- -p 3004 > /tmp/puzzly-browser.log 2>&1 &
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:3004/api/health > /dev/null; then break; fi
+            sleep 2
+          done
+          node scripts/smoke-visual.mjs http://127.0.0.1:3004
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: puzzly-visual-qa
+          path: /tmp/puzzly-qa/*.png
+          if-no-files-found: ignore

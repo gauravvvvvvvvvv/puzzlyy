@@ -69,6 +69,7 @@ export const ROOM_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const LOCK_TTL_MS = 20_000;
 /** A seat is shown as offline after this long without a heartbeat. */
 const PRESENCE_TTL_MS = 45_000;
+const SEAT_IDLE_TIMEOUT_MS = 60 * 60 * 1000;
 /** `alive` only writes when the stored timestamp is at least this stale. */
 const PRESENCE_WRITE_MS = 12_000;
 /** How many times to re-apply a batch after losing a compare-and-swap race. */
@@ -317,6 +318,34 @@ export async function joinRoom(code: string, input: JoinInput): Promise<Outcome<
     let seq = record.seq;
     let dirty = false;
 
+    // Clean abandoned seats on join too. Otherwise a room with six closed
+    // browsers could remain impossible to enter until another event arrives.
+    const stale = record.players.filter(player =>
+      now - (player.lastActiveAt ?? player.lastSeenAt) > SEAT_IDLE_TIMEOUT_MS &&
+      !(player.mediaActive && now - player.lastSeenAt < PRESENCE_TTL_MS));
+    if (stale.length) {
+      const ids = new Set(stale.map(player => player.id));
+      for (const player of stale) {
+        for (const g of engine.releaseAll(player.id)) {
+          delete record.locksAt[g];
+          deliveries.push({ to: null, envelope: { seq: ++seq,
+            event: { t: 'release', playerId: player.id, g } } });
+        }
+        deliveries.push({ to: null, envelope: { seq: ++seq,
+          event: { t: 'leave', playerId: player.id } } });
+      }
+      record.players = record.players.filter(player => !ids.has(player.id));
+      if (record.session) record.session = engine.toState();
+      if (!record.players.some(player => player.isHost)) {
+        const oldest = [...record.players].sort((a,b) => a.joinedAt-b.joinedAt)[0];
+        if (oldest) {
+          oldest.isHost = true;
+          record.room.hostId = oldest.id;
+        }
+      }
+      dirty = true;
+    }
+
     // --- Resume an existing seat -------------------------------------------
     if (input.playerId && input.token) {
       const seat = record.players.find((p) => p.id === input.playerId);
@@ -324,6 +353,7 @@ export async function joinRoom(code: string, input: JoinInput): Promise<Outcome<
         seat.name = sanitizeName(input.name ?? seat.name);
         seat.avatar = sanitizeAvatar(input.avatar ?? seat.avatar);
         seat.lastSeenAt = now;
+        seat.lastActiveAt ??= now;
         // Persist the same sequence we publish. Otherwise reconnecting a seat
         // consumes an unrecorded number and causes a later false gap.
         seq += 1;
@@ -332,6 +362,7 @@ export async function joinRoom(code: string, input: JoinInput): Promise<Outcome<
           ok: true,
           dirty: true,
           deliveries: [
+            ...deliveries,
             { to: null, envelope: { seq, event: { t: 'presence', players: publicRoster(record, now) } } },
           ],
           value: {
@@ -365,6 +396,8 @@ export async function joinRoom(code: string, input: JoinInput): Promise<Outcome<
       ready: false,
       joinedAt: now,
       lastSeenAt: now,
+      lastActiveAt: now,
+      mediaActive: false,
       connections: 0,
       token: createToken(),
       budget: 0,
@@ -476,6 +509,11 @@ export async function applyClientEvents(
       };
     }
 
+    pruneIdleSeats(ctx);
+    if (!ctx.record.players.some(player => player.id === ctx.seat.id)) {
+      if (ctx.dirty) record.seq = ctx.seq;
+      return { ok: true, dirty: ctx.dirty, deliveries: ctx.deliveries, value: { seq: ctx.seq } };
+    }
     expireLocks(ctx);
     expireTugs(ctx);
 
@@ -678,11 +716,14 @@ function onRtc(ctx: Ctx, event: Extract<ClientEvent, { t: 'rtc' }>): void {
 }
 
 function onMedia(ctx: Ctx, event: Extract<ClientEvent, { t: 'media' }>): void {
+  ctx.seat.mediaActive = event.audio || event.video;
+  ctx.seat.lastSeenAt = ctx.now;
+  ctx.dirty = true;
   emitLoose(ctx, { t: 'media', playerId: ctx.seat.id, audio: event.audio, video: event.video });
 }
 
-const TUG_DURATION_MS = 1800;
-const TUG_WIN_SCORE = 72;
+const TUG_DURATION_MS = 1300;
+const TUG_WIN_SCORE = 90;
 function expireTugs(ctx: Ctx): void {
   for (const contest of Object.values(ctx.record.tugs ?? {})) {
     if (ctx.now < contest.endsAt) continue;
@@ -694,8 +735,11 @@ function resolveTug(ctx: Ctx, contest: TugState): void {
   delete ctx.record.tugs?.[contest.g];
   const actual = ctx.engine.lockHolder(contest.g);
   let winner = contest.defender;
-  // Defender wins draws, and an inactive tug can never change piece ownership.
-  if (actual === contest.defender && contest.challengerScore > contest.defenderScore + 8) {
+  // Weighted lottery makes closely fought tugs exciting but not predetermined.
+  // Effort shifts the probability without making either player unbeatable.
+  const challengerChance = .18 + .64 * (contest.challengerScore /
+    Math.max(1, contest.challengerScore + contest.defenderScore));
+  if (actual === contest.defender && Math.random() < challengerChance) {
     ctx.engine.release(contest.g, contest.defender);
     const z = ctx.engine.grab(contest.g, contest.challenger);
     if (z !== null) {
@@ -994,7 +1038,39 @@ function onUndo(ctx: Ctx, direction: 'undo' | 'redo'): void {
 
 /* --- housekeeping --------------------------------------------------------- */
 
+/** Seats must not occupy a room indefinitely if somebody goes idle.
+ * Active calls are protected only while their authenticated heartbeat is live.
+ */
+function pruneIdleSeats(ctx: Ctx): void {
+  const stale = ctx.record.players.filter(seat =>
+    ctx.now - (seat.lastActiveAt ?? seat.lastSeenAt) > SEAT_IDLE_TIMEOUT_MS &&
+    !(seat.mediaActive && ctx.now - seat.lastSeenAt < PRESENCE_TTL_MS));
+  if (!stale.length) return;
+  for (const seat of stale) {
+    for (const groupId of ctx.engine.releaseAll(seat.id)) {
+      delete ctx.record.locksAt[groupId];
+      emit(ctx, { t: 'release', playerId: seat.id, g: groupId });
+    }
+    emit(ctx, { t: 'leave', playerId: seat.id });
+  }
+  const gone = new Set(stale.map(seat => seat.id));
+  ctx.record.players = ctx.record.players.filter(seat => !gone.has(seat.id));
+  if (!ctx.record.players.some(seat => seat.isHost)) {
+    const next = [...ctx.record.players].sort((a,b) => a.joinedAt - b.joinedAt)[0];
+    if (next) {
+      next.isHost = true;
+      ctx.record.room.hostId = next.id;
+    }
+  }
+  emit(ctx, { t: 'presence', players: publicRoster(ctx.record, ctx.now) });
+  save(ctx);
+}
+
 function onAlive(ctx: Ctx, event: Extract<ClientEvent, { t: 'alive' }>): void {
+  if (event.active && ctx.now - (ctx.seat.lastActiveAt ?? 0) >= PRESENCE_WRITE_MS) {
+    ctx.seat.lastActiveAt = ctx.now;
+    ctx.dirty = true;
+  }
   // Refresh locks this player says they are still holding, so a slow, careful
   // drag is never stolen out from under them.
   if (Array.isArray(event.holding)) {

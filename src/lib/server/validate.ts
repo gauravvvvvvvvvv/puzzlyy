@@ -282,7 +282,7 @@ function parseClientEvent(value: unknown): ClientEvent | null {
             .map((v) => asInt(v, 0, 100_000))
             .filter((v): v is number => v !== null)
         : undefined;
-      return { t: 'alive', holding };
+      return { t: 'alive', holding, active: asBool(raw.active) };
     }
     case 'resync':
       return { t: 'resync' };

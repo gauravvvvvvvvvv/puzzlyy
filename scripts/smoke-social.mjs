@@ -101,6 +101,18 @@ await send(A, [{ t: 'ready', ready: true }]);
 await send(B, [{ t: 'ready', ready: true }]);
 const playing = await api(roomPath);
 check('next round starts without rejoining', playing.body?.view?.room?.status === 'playing');
+// These commands must complete without blocking the room's next action.
+const reaction = await send(A, [{ t: 'react', emoji: '❤️', x: 100, y: 100 }]);
+check('reactions accepted immediately', reaction.status === 200);
+const hint = await send(B, [{ t: 'hint', level: 1 }]);
+check('hint command accepted', hint.status === 200);
+const heartbeat = await send(A, [{ t: 'alive', active: true, holding: [] }]);
+check('interaction-aware presence heartbeat accepted', heartbeat.status === 200);
+const mediaStarted = await send(A, [{ t: 'media', audio: true, video: false }]);
+check('call participation registered', mediaStarted.status === 200);
+const mediaStopped = await send(A, [{ t: 'media', audio: false, video: false }]);
+check('call participation can be released', mediaStopped.status === 200);
+
 await send(A, [{ t: 'grab', g: 0 }]);
 const grabbed = await api(roomPath);
 check('piece lock belongs to host', grabbed.body?.session?.locks?.['0'] === A.playerId);
@@ -108,7 +120,11 @@ const contested = await send(B, [{ t: 'tug', g: 0, force: 0 }]);
 check('contesting a held piece accepted', contested.status === 200);
 const tugSnap = await api(roomPath);
 check('visible server-resolved contest', tugSnap.body?.view?.tugs?.some(t => t.g === 0));
-for (let i = 0; i < 6; i++) await send(B, [{ t: 'tug', g: 0, force: 12 }]);
+for (let i = 0; i < 10; i++) {
+  const current = await api(roomPath);
+  if (!(current.body?.view?.tugs ?? []).some(t => t.g === 0)) break;
+  await send(B, [{ t: 'tug', g: 0, force: 12 }]);
+}
 const resolved = await api(roomPath);
 check('tug has one authoritative winner',
   [A.playerId, B.playerId].includes(resolved.body?.session?.locks?.['0']));
