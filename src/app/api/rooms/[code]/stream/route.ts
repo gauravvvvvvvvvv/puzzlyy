@@ -93,6 +93,10 @@ export async function GET(
         playerId,
         send: (delivery: Delivery) => {
           write(`data: ${JSON.stringify(delivery.envelope)}\n\n`);
+          // A kick invalidates this listener's seat immediately, even if the
+          // removed client ignores the event and keeps its tab open.
+          if (delivery.envelope.event.t === 'kicked' &&
+              delivery.envelope.event.playerId === playerId) finish();
         },
       });
 
