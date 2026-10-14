@@ -67,6 +67,7 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
   }, [canShare, copy, share, inviteUrl]);
   const [mode, setMode] = useState<Mode>(OFF);
   const [error, setError] = useState('');
+  const [callWarning, setCallWarning] = useState('');
   const [busy, setBusy] = useState(false);
   const [remote, setRemote] = useState<Remote[]>([]);
   const [unread, setUnread] = useState(0);
@@ -163,7 +164,7 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
           (next.video && !active.getVideoTracks().length)) {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone/camera capture is unavailable on this browser.');
         acquired = await navigator.mediaDevices.getUserMedia({
-          audio: next.audio && !active.getAudioTracks().length,
+          audio: next.audio && !active.getAudioTracks().length ? { echoCancellation: true, noiseSuppression: true, autoGainControl: true } : false,
           video: next.video && !active.getVideoTracks().length
             ? { width: { ideal: 480 }, height: { ideal: 360 }, frameRate: { ideal: 15, max: 20 } }
             : false,
@@ -173,6 +174,10 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
       if (next.audio || next.video) {
         try { iceServersRef.current = await session.loadIceServers(); }
         catch { /* STUN can still connect on permissive networks. */ }
+        const hasRelay = iceServersRef.current.some(server =>
+          [server.urls].flat().some(url => /^turns?:/i.test(url)));
+        setCallWarning(hasRelay ? '' :
+          'Calls may not connect on restrictive networks. The room host should configure a TURN relay for reliable calls.');
       }
       // Preserve tracks which stay enabled, particularly the camera when
       // toggling microphone. Do not reacquire device permissions needlessly.
@@ -198,7 +203,14 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
         active.removeTrack(track);
         track.stop();
       });
-      setError(e instanceof Error ? e.message : 'Could not access your device.');
+      const name = e instanceof DOMException ? e.name : '';
+      setError(name === 'NotAllowedError' || name === 'PermissionDeniedError'
+        ? 'Microphone or camera access was blocked. Allow access in your browser site settings, then tap the icon to retry.'
+        : name === 'NotFoundError' || name === 'DevicesNotFoundError'
+          ? 'No matching microphone or camera was found. Connect a device or disable that option, then retry.'
+          : name === 'NotReadableError'
+            ? 'Your camera or microphone is busy in another app. Close it and retry.'
+            : e instanceof Error ? e.message : 'Could not access your device.');
     } finally {
       setBusy(false);
     }
@@ -422,7 +434,11 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
             className="grid size-10 place-items-center rounded-lg text-xl transition hover:bg-[var(--surface-inset)] active:scale-90">{symbol}</button>)}
         </div>}
         <RoomJukebox session={session} />
-        {error && <p role="alert" className="px-3 pt-2 text-xs text-red-500">{error}</p>}
+        {error && <div role="alert" className="mx-3 my-2 flex items-start gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-inset)] p-3 text-sm text-[var(--fg)]">
+          <p className="min-w-0 flex-1">{error}</p>
+          <button type="button" onClick={() => setError('')} aria-label="Dismiss call error" className="rounded-lg px-2 py-1 hover:bg-[var(--surface-2)]">×</button>
+        </div>}
+        {callWarning && hasMedia && <p role="status" className="mx-3 my-1 text-xs leading-relaxed text-[var(--fg-muted)]">{callWarning}</p>}
         {(preview || remote.length > 0) && (
           <div className={(callExpanded ? 'fixed inset-3 z-[60] max-h-[calc(100dvh-1.5rem)] rounded-xl border bg-[var(--surface)] p-3 shadow-2xl sm:inset-[5vh_5vw] ' : 'max-h-[min(40dvh,330px)] border-b p-2 ') + 'overflow-auto border-[var(--line)]'}>
             {callExpanded && <button type="button" onClick={() => setCallExpanded(false)} className="mb-3 w-full rounded-lg border p-2 text-sm hover:bg-[var(--surface-inset)]">Close full call view</button>}
