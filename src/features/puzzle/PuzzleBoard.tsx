@@ -868,7 +868,6 @@ export function PuzzleBoard({
 
   return (
     <div className="relative size-full overflow-hidden" style={{ background: 'var(--board-bg)' }}>
-      <RoomThemeEnvironment />
       {engine.puzzle.settings.rotation && (
         <div className="pointer-events-auto absolute bottom-24 left-3 z-30 flex gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)]/95 p-1.5 shadow-lg sm:bottom-20"
           role="group" aria-label="Rotate the piece you are holding">
@@ -902,6 +901,7 @@ export function PuzzleBoard({
         onContextMenu={(event) => event.preventDefault()}
       />
 
+      <RoomThemeEnvironment />
       {session.tugs.length > 0 && (
         <div aria-hidden className="pointer-events-none absolute inset-0 z-10"
           style={{ animation: 'puzzly-tug-shake 120ms ease-in-out infinite' }} />
