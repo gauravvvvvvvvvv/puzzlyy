@@ -702,7 +702,12 @@ export function PuzzleBoard({
           // Credit belongs to the authoritative merge broadcast, so the
           // optimistic drop's bookkeeping is rolled straight back.
           const creditBefore = engineNow.credit.get(myId) ?? 0;
+          const wasAnchored = engineNow.isAnchored(gesture.g);
           const result = engineNow.drop(gesture.g, ox, oy, myId, Date.now());
+          if (!wasAnchored && engineNow.isAnchored(gesture.g) && !result.merges.length) {
+            snap(`slot:${gesture.g}`, {mine: true, source: 'optimistic'});
+            renderer?.pulse(gesture.g);
+          }
           engineNow.credit.set(myId, creditBefore);
           engineNow.release(gesture.g, myId);
 
