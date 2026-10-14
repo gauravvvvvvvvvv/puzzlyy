@@ -378,6 +378,12 @@ Puzzly is **source-available, not open source**. You may inspect the code for ev
   Spotify playback requires Spotify-specific OAuth, user account entitlements,
   and the appropriate supported player APIs. Do not claim the embedded Spotify
   audio is synchronized.
+- **Host moderation:** Room Chat → People lists players and spectators.
+  The host can kick anyone except themselves. Kicks revoke the active seat,
+  release puzzle locks and active tug contests, close the removed participant's
+  SSE stream, and stop their client from continuing. The old seat cannot be
+  restored by refreshing. Room guests are anonymous, so this is seat removal,
+  not a permanent account ban against someone returning as a new identity.
 - **Spectators:** A room keeps six interactive seats plus up to twenty viewers.
   Full rooms admit newcomers as spectators automatically; append `?watch=1`
   to the room link to join explicitly as a spectator. They can chat, react, add
