@@ -374,15 +374,6 @@ export function PuzzleBoard({
           overlay.appendChild(dot);
         }
       }
-      const secret = overlay.querySelector<HTMLElement>('[data-secret-piece]');
-      if (secret) {
-        const id = Number(secret.dataset.secretPiece);
-        if (engineRef.current.isPlaceable(id)) {
-          const w = engineRef.current.pieceWorld(id);
-          const screen = renderer.screenFromWorld(w.x, w.y);
-          secret.style.display = 'block';
-          secret.style.transform = 'translate3d(' + screen.x + 'px,' + screen.y + 'px,0)';
-        } else secret.style.display = 'none';
       }
 
       // Cursors are built by hand: they change many times a second and must
@@ -934,11 +925,6 @@ export function PuzzleBoard({
       )}
 
       <div ref={overlayRef} className="pointer-events-none absolute inset-0 overflow-hidden">
-        {engine.pieceCount > 0 && <div data-secret-piece={(engine.puzzle.seed >>> 4) % engine.pieceCount}
-          className="pointer-events-none absolute top-0 left-0 z-10 text-lg opacity-70 drop-shadow-lg"
-          style={{transform:'translate3d(-9999px,-9999px,0)', animation:'puzzly-mystery-glow 2s ease-in-out infinite'}}>
-          ✦
-        </div>}
         {session.moments.filter(m => Date.now() - m.at < 4500).map(m => (
           <div key={m.id} className="pointer-events-none absolute inset-x-4 top-1/4 z-30 flex justify-center">
             <span className="puzzly-world-celebration rounded-full border bg-[var(--surface)]/95 px-5 py-3 text-sm font-semibold shadow-2xl"
