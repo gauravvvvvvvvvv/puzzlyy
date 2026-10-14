@@ -774,7 +774,7 @@ function onConnectPieces(ctx: Ctx, connections: number, pieceId: number): void {
 
 /** Chat is tied to the room, not to any individual puzzle round. */
 function onChat(ctx: Ctx, raw: string): void {
-  const text = raw.replace(/\s+/g, ' ').trim().slice(0, 500);
+  const text = raw.replace(/\r\n?/g, '\n').replace(/[\t ]+/g, ' ').replace(/\n{4,}/g, '\n\n\n').trim().slice(0, 500);
   if (!text) return;
   const message = {
     id: createId('msg', 12),
