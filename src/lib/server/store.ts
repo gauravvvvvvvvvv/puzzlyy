@@ -63,6 +63,10 @@ export interface SeatState {
   ready: boolean;
   joinedAt: number;
   lastSeenAt: number;
+  /** Last meaningful interaction, excluding idle connection heartbeats. */
+  activeAt?: number;
+  /** Renewed during an active voice/video call only. */
+  mediaAt?: number;
   /** Piece connections this player has made, for the results split. */
   connections: number;
   /** Secret bearer token. Never broadcast, never sent to another player. */

@@ -169,15 +169,7 @@ export function BoardToolbar({
               <span className="text-xs text-[var(--fg)]">Appearance</span>
               <ThemeToggle compact />
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-1 w-full justify-start text-[var(--color-danger-400)]"
-              onClick={onLeave}
-            >
-              <Icon name="arrow-left" size={16} />
-              Leave the room
-            </Button>
+
           </Popover>
         ) : null}
 

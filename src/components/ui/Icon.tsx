@@ -56,10 +56,19 @@ export type IconName =
   | 'wifi'
   | 'close'
   | 'grid'
-  | 'heart';
+  | 'heart'
+  | 'mic'
+  | 'mic-off'
+  | 'video'
+  | 'video-off';
 
 /** Paths are drawn on a 24×24 grid with a 1.7 stroke, so weights match. */
 const PATHS: Record<IconName, string> = {
+  mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM5 11a7 7 0 0 0 14 0M12 18v3M8 21h8',
+  'mic-off': 'M3 3l18 18M9 9v3a3 3 0 0 0 5.1 2.1M15 9V6a3 3 0 0 0-5.8-1M5 11a7 7 0 0 0 12 5M19 11a7 7 0 0 1-.4 2.4M12 18v3M8 21h8',
+  video: 'M4 6h12a2 2 0 0 1 2 2v2l4-3v10l-4-3v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z',
+  'video-off': 'M3 3l18 18M9 6h7a2 2 0 0 1 2 2v2l4-3v10l-4-3v1M4 6h1M2 9v7a2 2 0 0 0 2 2h10',
+
   jigsaw:
     'M10 4.5h1.6a1.4 1.4 0 1 1 2.8 0H16a1.5 1.5 0 0 1 1.5 1.5v2.1a1.4 1.4 0 1 0 0 2.8V13a1.5 1.5 0 0 1-1.5 1.5h-2.1a1.4 1.4 0 1 1-2.8 0H8.5A1.5 1.5 0 0 1 7 13v-1.6a1.4 1.4 0 1 1 0-2.8V6A1.5 1.5 0 0 1 8.5 4.5H10Z M6 16.5h5a1.5 1.5 0 0 1 1.5 1.5v1.5H6a1.5 1.5 0 0 1-1.5-1.5v-1.5H6Z',
   scramble:

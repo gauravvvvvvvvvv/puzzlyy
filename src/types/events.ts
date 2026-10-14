@@ -45,7 +45,7 @@ export type ClientEvent =
    * holds, so a drag that lasts longer than the lock TTL is not stolen. Only
    * writes when the stored timestamp has actually gone stale.
    */
-  | { t: 'alive'; holding?: number[] }
+  | { t: 'alive'; holding?: number[]; media?: boolean }
   /** "I think I missed something" — asks for a fresh snapshot, privately. */
   | { t: 'resync' }
   /** Host re-cuts the same picture for a rematch. */

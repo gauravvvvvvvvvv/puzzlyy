@@ -80,6 +80,7 @@ export abstract class BaseTransport implements RealtimeTransport {
   /** Groups this client currently holds, so `alive` can refresh their locks. */
   private holding = new Set<number>();
   private lastCursorAt = 0;
+  private mediaActive = false;
 
   constructor(config: TransportConfig) {
     this.config = config;
@@ -163,7 +164,7 @@ export abstract class BaseTransport implements RealtimeTransport {
     this.flushTimer ??= setInterval(() => void this.pump(), FLUSH_MS);
     this.aliveTimer ??= setInterval(() => {
       if (this.state !== 'connected') return;
-      this.send({ t: 'alive', holding: [...this.holding] });
+      this.send({ t: 'alive', holding: [...this.holding], media: this.mediaActive });
     }, ALIVE_MS);
   }
 
@@ -242,6 +243,7 @@ export abstract class BaseTransport implements RealtimeTransport {
   /* ------------------------------------------------------------------ */
 
   send(event: ClientEvent): void {
+    if (event.t === 'media') this.mediaActive = event.audio || event.video;
     if (this.disposed) return;
     // Track holds here rather than making the caller tell us twice.
     if (event.t === 'grab') this.holding.add(event.g);

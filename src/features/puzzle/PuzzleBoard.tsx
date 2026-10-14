@@ -184,6 +184,9 @@ export function PuzzleBoard({
       cameraRef.current = { ...camera };
     };
     renderer.remoteLocks = remoteLocks();
+    renderer.ghostOpacity = ghost ? 0.16 : 0;
+    renderer.showGrid = grid;
+    renderer.edgeFocus = edgeFocus;
     rendererRef.current = renderer;
 
     const observer = new ResizeObserver(() => {
@@ -727,8 +730,8 @@ export function PuzzleBoard({
         ref={canvasRef}
         // `touch-none` is what makes dragging possible on a phone: without it the
         // browser claims the gesture for scrolling (spec §24).
-        className="block size-full touch-none select-none"
-        style={{ cursor: frozen ? 'default' : pingArmed ? 'crosshair' : cursorStyle }}
+        className={"block size-full touch-none select-none " + (session.tugs.length && !reducedMotion ? "puzzly-tug-board" : "")}
+        style={{ cursor: frozen ? 'default' : pingArmed ? 'crosshair' : cursorStyle, animation: session.tugs.length && !reducedMotion ? 'puzzly-tug-shake 120ms ease-in-out infinite' : undefined }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={(event) => finishPointer(event.pointerId, false)}
@@ -740,6 +743,10 @@ export function PuzzleBoard({
         onContextMenu={(event) => event.preventDefault()}
       />
 
+      {session.tugs.length > 0 && (
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-10"
+          style={{ animation: 'puzzly-tug-shake 120ms ease-in-out infinite' }} />
+      )}
       {session.tugs.length > 0 && (
         <div className="pointer-events-none absolute inset-x-3 top-3 z-20 mx-auto max-w-xs space-y-2">
           {session.tugs.map(contest => {
@@ -807,6 +814,18 @@ export function PuzzleBoard({
             </span>
           </div>
         ))}
+      </div>
+      <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden" aria-live="off">
+        {session.reactions.flatMap(burst => Array.from({ length: 24 }, (_, i) => {
+          const seed = (i * 67 + burst.id.length * 37) % 101;
+          return <span key={burst.id + ':' + i} className="absolute text-2xl sm:text-3xl"
+            style={{
+              left: (4 + ((seed * 37 + i * 13) % 92)) + '%',
+              top: '-10%',
+              animation: 'puzzly-emoji-shower ' + (1.2 + i % 5 * .22) + 's ease-in ' + (i % 9 * .055) + 's forwards',
+              opacity: .95,
+            }}>{burst.emoji}</span>;
+        }))}
       </div>
     </div>
   );

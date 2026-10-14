@@ -134,6 +134,7 @@ export interface RoomSession {
   loadIceServers: () => Promise<RTCIceServer[]>;
   decodeSignal: (sealed: string) => Promise<string>;
   sendChat: (text: string) => void;
+  reactNow: (emoji: string, x: number, y: number) => void;
 
   send: (event: ClientEvent) => void;
   flush: () => void;
@@ -659,6 +660,15 @@ export function useRoomSession(code: string): RoomSession {
     transportRef.current?.send(event);
   }, []);
 
+  const reactNow = useCallback((emoji: string, x: number, y: number) => {
+    const id = 'local:' + Date.now().toString(36);
+    const burst = { id, playerId: myIdRef.current, emoji, x, y };
+    setReactions(list => [...list.slice(-11), burst]);
+    later(() => setReactions(list => list.filter(item => item.id !== id)), REACTION_MS);
+    transportRef.current?.send({ t: 'react', emoji, x, y });
+    transportRef.current?.flush();
+  }, [later]);
+
   const sendChat = useCallback((text: string) => {
     const value = text.trim().slice(0, 500);
     if (!value || !myIdRef.current) return;
@@ -751,6 +761,7 @@ export function useRoomSession(code: string): RoomSession {
     loadIceServers,
     decodeSignal,
     sendChat,
+    reactNow,
     send,
     flush,
     subscribe,
