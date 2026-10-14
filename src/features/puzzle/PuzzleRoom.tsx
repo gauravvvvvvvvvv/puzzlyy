@@ -63,8 +63,8 @@ export function PuzzleRoom({
   const [grid, setGrid] = useState(false);
   const [edgeFocus, setEdgeFocus] = useState(false);
   useEffect(() => {
-    setGrid(readJson('board:grid', false) === true);
-    setEdgeFocus(readJson('board:edges', false) === true);
+    setGrid(readJson<boolean>('board:grid', false));
+    setEdgeFocus(readJson<boolean>('board:edges', false));
   }, []);
   const updateGrid = useCallback((enabled: boolean) => {
     setGrid(enabled);
