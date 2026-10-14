@@ -29,6 +29,7 @@ import { useRoomSession } from '@/hooks/useRoomSession';
 import { markPlayed, recordCompletion, rememberPuzzle } from '@/lib/storage/library';
 import { clearLastRoom, clearSeat } from '@/lib/storage/seats';
 import { RoomSocial } from '@/features/rooms/RoomSocial';
+import { saveScrapbookPage } from '@/features/puzzle/FriendshipScrapbook';
 import { NextPuzzlePicker } from '@/features/rooms/NextPuzzlePicker';
 
 export interface RoomClientProps {
@@ -93,6 +94,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
     if (recordedRef.current === key) return;
     recordedRef.current = key;
     recordCompletion(result.puzzleId, result.durationMs);
+    saveScrapbookPage(result);
   }, [phase, result]);
 
   /* --- actions ------------------------------------------------------------- */

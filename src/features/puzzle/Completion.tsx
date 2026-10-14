@@ -19,6 +19,7 @@ import { Button, ButtonLink } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { Avatar } from '@/features/multiplayer/PresenceRail';
 import { MemoryCard } from '@/features/puzzle/MemoryCard';
+import { FriendshipScrapbook } from '@/features/puzzle/FriendshipScrapbook';
 import { useClipboard } from '@/hooks/useClipboard';
 import { formatDuration, spellDuration } from '@/lib/format';
 import { playerColor } from '@/lib/multiplayer/identity';
@@ -150,6 +151,8 @@ export function Completion({
               ))}
           </div>}
         </div>
+
+        <FriendshipScrapbook />
 
         {/* Who placed what. Bars rather than a table, because the shape of the
             collaboration is the interesting part. */}
