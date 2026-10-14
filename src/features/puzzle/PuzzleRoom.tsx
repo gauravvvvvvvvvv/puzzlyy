@@ -26,6 +26,7 @@ import { PuzzleBoard } from '@/features/puzzle/PuzzleBoard';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import type { RoomSession } from '@/hooks/useRoomSession';
 import { formatDuration } from '@/lib/format';
+import { readJson, writeJson } from '@/lib/storage/local';
 import type { PuzzleEngine } from '@/lib/puzzle/engine';
 import type { PuzzleRenderer } from '@/lib/puzzle/renderer';
 import { setSoundEnabled, soundEnabled } from '@/lib/puzzle/sound';
@@ -61,6 +62,19 @@ export function PuzzleRoom({
   const [ghost, setGhost] = useState(!puzzle.settings.blindMode);
   const [grid, setGrid] = useState(false);
   const [edgeFocus, setEdgeFocus] = useState(false);
+  useEffect(() => {
+    setGrid(readJson('board:grid', false) === true);
+    setEdgeFocus(readJson('board:edges', false) === true);
+  }, []);
+  const updateGrid = useCallback((enabled: boolean) => {
+    setGrid(enabled);
+    writeJson('board:grid', enabled);
+  }, []);
+  const updateEdges = useCallback((enabled: boolean) => {
+    setEdgeFocus(enabled);
+    writeJson('board:edges', enabled);
+  }, []);
+
   const [milestone, setMilestone] = useState<number | null>(null);
   const celebrated = useRef(0);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -445,9 +459,9 @@ export function PuzzleRoom({
           ghost={ghost}
           onGhost={setGhost}
           grid={grid}
-          onGrid={setGrid}
+          onGrid={updateGrid}
           edgeFocus={edgeFocus}
-          onEdgeFocus={setEdgeFocus}
+          onEdgeFocus={updateEdges}
           sound={sound}
           onSound={toggleSound}
           onLeave={onLeave}
