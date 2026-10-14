@@ -378,6 +378,12 @@ Puzzly is **source-available, not open source**. You may inspect the code for ev
   Spotify playback requires Spotify-specific OAuth, user account entitlements,
   and the appropriate supported player APIs. Do not claim the embedded Spotify
   audio is synchronized.
+- **Collapsible room conversation:** The sidebar has a separately scrollable
+  room-tools area and chat panel. Collapse Chat without closing theme, jukebox,
+  ambience or People controls. When open, messages fill the available height,
+  the composer stays docked flush to the bottom, and the empty state is centered.
+  The shorter message placeholder avoids wrapping on small screens. Leave is a
+  compact action beside the Chat toggle; puzzle history remains under room tools.
 - **Host moderation:** Room Chat → People lists players and spectators.
   The host can kick anyone except themselves. Kicks revoke the active seat,
   release puzzle locks and active tug contests, close the removed participant's
