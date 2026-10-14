@@ -482,6 +482,20 @@ export function RoomSocial({ session, code, onLeave, themePreview, onThemePrevie
             onClick={()=>session.reactNow(emoji,session.engine?.geometry.boardW ?? 0,session.engine?.geometry.boardH ?? 0)}
             className="grid size-10 place-items-center rounded-lg text-xl transition hover:bg-[var(--surface-inset)] active:scale-90">{emoji}</button>)}
         </div>}
+        {session.history.length > 0 && (
+          <details className="border-t border-[var(--line)] px-3 py-2">
+            <summary className="cursor-pointer text-xs text-[var(--fg-muted)]">
+              Puzzles completed together ({session.history.length})
+            </summary>
+            <ul className="mt-2 max-h-24 space-y-1 overflow-auto">
+              {session.history.slice(-6).reverse().map(result => (
+                <li key={result.puzzleId} className="truncate text-xs">
+                  {result.puzzleTitle} · {result.pieceCount} pieces
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         <AmbientSoundscape roomTheme={session.room?.theme} />
         </div>
         <section className={chatExpanded ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0'} aria-label="Room conversation">
@@ -534,20 +548,6 @@ export function RoomSocial({ session, code, onLeave, themePreview, onThemePrevie
           })}
         </div>
         {chatExpanded && typing && <p className="px-3 pb-1 text-2xs italic text-[var(--fg-muted)]">{typing} is typing…</p>}
-        {session.history.length > 0 && (
-          <details className="border-t border-[var(--line)] px-3 py-2">
-            <summary className="cursor-pointer text-xs text-[var(--fg-muted)]">
-              Puzzles completed together ({session.history.length})
-            </summary>
-            <ul className="mt-2 max-h-24 space-y-1 overflow-auto">
-              {session.history.slice(-6).reverse().map(result => (
-                <li key={result.puzzleId} className="truncate text-xs">
-                  {result.puzzleTitle} · {result.pieceCount} pieces
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
         <form onSubmit={sendMessage}
           className={(chatExpanded ? 'flex' : 'hidden') +
             ' z-10 shrink-0 items-center gap-2 border-t border-[var(--line)] bg-[var(--surface)] p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]'}>
