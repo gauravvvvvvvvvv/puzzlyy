@@ -12,6 +12,12 @@ import type {
   Player,
   ChatMessage,
   TugState,
+  MusicState,
+  MusicTrack,
+  RoomTheme,
+  RoomSticker,
+  RoomMoment,
+  RoomAchievement,
   PuzzleSessionState,
   RoomStatus,
   RoomView,
@@ -51,6 +57,9 @@ export type ClientEvent =
   /** Host re-cuts the same picture for a rematch. */
   | { t: 'restart' }
   /** Voluntary, explicit leave (closing a tab is handled by the SSE close). */
+  | { t: 'music'; action: 'add' | 'remove' | 'play' | 'pause' | 'next' | 'seek' | 'select'; track?: MusicTrack; index?: number; position?: number }
+  | { t: 'theme'; theme: RoomTheme }
+  | { t: 'sticker'; symbol: string; x: number; y: number }
   | { t: 'chat'; text: string }
   | { t: 'typing'; active: boolean }
   | { t: 'tug'; g: number; force: number }
@@ -114,6 +123,11 @@ export type ServerEvent =
   | { t: 'complete'; result: SessionResult; session: PuzzleSessionState }
   /** Server refused a request; client should reconcile from `session`. */
   | { t: 'reject'; reason: string; session?: PuzzleSessionState; g?: number }
+  | { t: 'music'; state: MusicState }
+  | { t: 'theme'; theme: RoomTheme }
+  | { t: 'sticker'; sticker: RoomSticker }
+  | { t: 'moment'; moment: RoomMoment }
+  | { t: 'achievement'; achievement: RoomAchievement }
   | { t: 'chat'; message: ChatMessage }
   | { t: 'typing'; playerId: string; active: boolean }
   | { t: 'tug'; contest: TugState | null; g: number; winner?: string }

@@ -290,6 +290,37 @@ function parseClientEvent(value: unknown): ClientEvent | null {
       return { t: 'restart' };
     case 'typing':
       return { t: 'typing', active: asBool(raw.active) };
+    case 'music': {
+      const action = raw.action;
+      if (action !== 'add' && action !== 'remove' && action !== 'play' &&
+          action !== 'pause' && action !== 'next' && action !== 'seek' && action !== 'select') return null;
+      if (action === 'add') {
+        const t = raw.track;
+        if (!t || typeof t !== 'object') return null;
+        const track = t as Record<string, unknown>;
+        const provider = track.provider;
+        const id = asString(track.mediaId, 100);
+        if ((provider !== 'youtube' && provider !== 'spotify') || !id) return null;
+        if (provider === 'youtube' && !(/^[a-zA-Z0-9_-]{11}$/.test(id) || /^list:[a-zA-Z0-9_-]{10,50}$/.test(id))) return null;
+        if (provider === 'spotify' && !/^(track|playlist|album):[a-zA-Z0-9]{22}$/.test(id)) return null;
+        return { t: 'music', action, track: { id: '', provider, mediaId: id,
+          title: asString(track.title, 90) ?? 'Shared track', addedBy: '' } };
+      }
+      const index = asInt(raw.index, 0, 99) ?? undefined;
+      const position = asFiniteNumber(raw.position);
+      return { t: 'music', action, index, position: position === null ? undefined : Math.min(21600, Math.max(0, position)) };
+    }
+    case 'theme': {
+      const theme = raw.theme;
+      return theme === 'cozy' || theme === 'arcade' || theme === 'space' || theme === 'beach'
+        ? { t: 'theme', theme } : null;
+    }
+    case 'sticker': {
+      const symbol = asString(raw.symbol, 12);
+      const x = asFiniteNumber(raw.x); const y = asFiniteNumber(raw.y);
+      return symbol && x !== null && y !== null && Math.abs(x) < 100000 && Math.abs(y) < 100000
+        ? { t: 'sticker', symbol, x, y } : null;
+    }
     case 'chat': {
       const text = asString(raw.text, 500);
       return text ? { t: 'chat', text } : null;

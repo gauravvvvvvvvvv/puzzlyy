@@ -18,11 +18,12 @@ import { useState } from 'react';
 import { Button, ButtonLink } from '@/components/ui/Button';
 import { Icon } from '@/components/ui/Icon';
 import { Avatar } from '@/features/multiplayer/PresenceRail';
+import { MemoryCard } from '@/features/puzzle/MemoryCard';
 import { useClipboard } from '@/hooks/useClipboard';
 import { formatDuration, spellDuration } from '@/lib/format';
 import { playerColor } from '@/lib/multiplayer/identity';
 import { ApiError, createChallenge } from '@/lib/realtime/api';
-import type { SessionResult } from '@/types/models';
+import type { SessionResult, RoomAchievement, RoomMoment } from '@/types/models';
 
 export interface CompletionProps {
   result: SessionResult;
@@ -33,6 +34,9 @@ export interface CompletionProps {
   /** Same picture, fresh scramble. Host-only in a shared room. */
   onPlayAgain: () => void;
   canPlayAgain: boolean;
+  achievements?: RoomAchievement[];
+  moments?: RoomMoment[];
+  dailyKey?: string;
 }
 
 export function Completion({
@@ -43,11 +47,15 @@ export function Completion({
   solo,
   onPlayAgain,
   canPlayAgain,
+  achievements = [],
+  moments = [],
+  dailyKey,
 }: CompletionProps) {
   const { copied, copy, canShare, share } = useClipboard();
   const [challenge, setChallenge] = useState<{ url: string } | null>(null);
   const [challengeError, setChallengeError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [friendsBoard, setFriendsBoard] = useState(false);
 
   const players = [...result.players].sort((a, b) => b.connections - a.connections);
   const summary = summaryLine(result, solo);
@@ -115,6 +123,33 @@ export function Completion({
           <Stat label="Sections" value={sections} />
           <Stat label="Hints" value={result.hintsUsed} />
         </dl>
+
+        {dailyKey && <div className="card space-y-2 p-4">
+          <p className="eyebrow">Daily puzzle · {dailyKey}</p>
+          <button type="button" onClick={()=>setFriendsBoard(v=>!v)}
+            className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs transition hover:bg-[var(--surface-inset)]">
+            {friendsBoard?'Hide':'Show'} friends scoreboard
+          </button>
+          {friendsBoard && <ol className="space-y-1 text-sm">
+            {players.map((p,i)=><li key={p.id} className="flex justify-between gap-3">
+              <span>{i+1}. {p.name}{p.id===myId?' (you)':''}</span>
+              <span className="tabular-nums">{p.connections} connections</span>
+            </li>)}
+          </ol>}
+          <p className="text-xs text-[var(--fg-muted)]">A friendly team snapshot, not a global competition.</p>
+        </div>}
+        <div className="card space-y-3 p-4">
+          <p className="eyebrow">Your shared scrapbook</p>
+          <MemoryCard result={result} achievements={achievements} moments={moments} />
+          {achievements.length > 0 && <div className="flex flex-wrap gap-2">
+            {achievements.filter(a=>result.players.some(p=>p.id===a.playerId))
+              .slice(-6).map((award,i)=>(
+                <span key={award.playerId+award.type+i} className="rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-xs">
+                  {award.name}
+                </span>
+              ))}
+          </div>}
+        </div>
 
         {/* Who placed what. Bars rather than a table, because the shape of the
             collaboration is the interesting part. */}

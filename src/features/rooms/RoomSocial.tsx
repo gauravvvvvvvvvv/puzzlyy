@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { RoomSession } from '@/hooks/useRoomSession';
+import { RoomJukebox } from '@/features/rooms/RoomJukebox';
 import { Icon } from '@/components/ui/Icon';
 import { useClipboard } from '@/hooks/useClipboard';
 
@@ -359,6 +360,42 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
             </button>}
           </div>
         )}
+        <details className="border-b border-[var(--line)] px-3 py-3">
+          <summary className="cursor-pointer text-sm font-medium">Room theme · {session.room?.theme ?? 'cozy'}</summary>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(['cozy', 'arcade', 'space', 'beach'] as const).map(theme => (
+              <button key={theme} type="button" disabled={!session.isHost}
+                onClick={() => { session.send({ t: 'theme', theme }); session.flush(); }}
+                aria-pressed={(session.room?.theme ?? 'cozy') === theme}
+                className={'rounded-lg border px-3 py-2 text-xs capitalize transition active:scale-95 '+
+                  ((session.room?.theme ?? 'cozy') === theme ? 'border-[var(--accent)] bg-[var(--accent-soft)]' :
+                    'border-[var(--line)] hover:bg-[var(--surface-inset)]')}>{theme}</button>
+            ))}
+          </div>
+          {!session.isHost && <p className="mt-1 text-xs text-[var(--fg-muted)]">The host chooses the room theme.</p>}
+        </details>
+        {session.me?.spectator && <p className="border-b border-[var(--line)] bg-sky-400/10 px-3 py-2 text-xs text-sky-300">Spectator mode: watch, chat, react, and listen with friends. Puzzle pieces are read-only.</p>}
+        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] p-3">
+          <button type="button" onClick={() => {
+            const url = window.location.origin + '/room/' + code + '?watch=1';
+            void copy(url, 'spectate');
+          }} className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs transition hover:bg-[var(--surface-inset)] active:scale-95">
+            Invite spectators
+          </button>
+          <span className="text-2xs text-[var(--fg-subtle)]">
+            {session.players.filter(p=>!p.spectator).length}/6 playing ·
+            {session.players.filter(p=>p.spectator).length} watching
+          </span>
+        </div>
+        {session.me?.spectator && <div className="flex flex-wrap gap-1 border-b border-[var(--line)] p-2">
+          <span className="self-center text-2xs text-[var(--fg-muted)]">Place a cheer</span>
+          {['🌼','⭐','🦆'].map(symbol=><button key={symbol} type="button"
+            aria-label={'Place sticker '+symbol}
+            onClick={()=>session.stickerNow(symbol,(session.engine?.geometry.boardW ?? 0)/2,
+              (session.engine?.geometry.boardH ?? 0)/2)}
+            className="grid size-10 place-items-center rounded-lg text-xl transition hover:bg-[var(--surface-inset)] active:scale-90">{symbol}</button>)}
+        </div>}
+        <RoomJukebox session={session} />
         {error && <p role="alert" className="px-3 pt-2 text-xs text-red-500">{error}</p>}
         {(preview || remote.length > 0) && (
           <div className={(callExpanded ? 'fixed inset-3 z-[60] max-h-[calc(100dvh-1.5rem)] rounded-xl border bg-[var(--surface)] p-3 shadow-2xl sm:inset-[5vh_5vw] ' : 'max-h-[min(40dvh,330px)] border-b p-2 ') + 'overflow-auto border-[var(--line)]'}>
@@ -373,6 +410,13 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
             {videoCount >= 5 && <p className="mt-2 text-center text-2xs text-[var(--fg-muted)]">Six-person video grid · individual streams</p>}
           </div>
         )}
+        {session.me?.spectator && <div className="flex flex-wrap gap-1 border-b border-[var(--line)] p-2">
+          <span className="self-center pr-2 text-2xs text-[var(--fg-muted)]">Cheer on the team</span>
+          {['👏','🎉','❤️','🔥','🌟'].map(emoji=><button type="button" key={emoji}
+            aria-label={'React '+emoji}
+            onClick={()=>session.reactNow(emoji,session.engine?.geometry.boardW ?? 0,session.engine?.geometry.boardH ?? 0)}
+            className="grid size-10 place-items-center rounded-lg text-xl transition hover:bg-[var(--surface-inset)] active:scale-90">{emoji}</button>)}
+        </div>}
         <div ref={pane} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3" aria-label="Room messages" role="log">
           {session.chat.length === 0 && <p className="mx-auto max-w-[16rem] py-8 text-center text-xs leading-relaxed text-[var(--fg-muted)]">
             Your conversation stays here when you play the next puzzle.

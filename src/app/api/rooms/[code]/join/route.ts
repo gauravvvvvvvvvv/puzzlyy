@@ -42,6 +42,7 @@ export async function POST(
     avatar: body.avatar,
     playerId: asString(body.playerId, 40) ?? undefined,
     token: asString(body.token, 80) ?? undefined,
+    watch: body.watch === true,
   });
   if (!result.ok) return fail(result.error, result.status);
 

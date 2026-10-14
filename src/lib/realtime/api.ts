@@ -91,6 +91,7 @@ export interface CreateRoomInput {
   gameType?: GameType;
   title?: string;
   hostCanForceStart?: boolean;
+  daily?: boolean;
 }
 
 export interface CreateRoomResponse {
@@ -119,6 +120,7 @@ export interface JoinInput {
   /** Previous credentials, to resume the same seat after a refresh. */
   playerId?: string;
   token?: string;
+  watch?: boolean;
 }
 
 export interface JoinResponse extends RoomSnapshot {

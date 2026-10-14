@@ -70,8 +70,9 @@ export function Lobby({
   // the network/database round trip, not hold the button hostage.
   const ready = readyIntent ?? (me?.ready ?? false);
   useEffect(() => { if (readyIntent === me?.ready) setReadyIntent(null); }, [me?.ready, readyIntent]);
-  const alone = players.length < 2;
-  const everyoneReady = players.length >= 2 && players.every((p) => p.ready);
+  const participants = players.filter(p => !p.spectator);
+  const alone = participants.length < 2;
+  const everyoneReady = participants.length >= 2 && participants.every((p) => p.ready);
   const canStart = isHost && cutReady && (solo || alone || everyoneReady || room.settings.hostCanForceStart);
 
   const blurb = useMemo(
@@ -176,12 +177,15 @@ export function Lobby({
         <div className="card flex-1 p-5">
           <div className="flex items-baseline justify-between">
             <p className="eyebrow">
-              {solo ? 'Solo' : alone ? 'Waiting for your friend' : `${players.length} here`}
+              {solo ? 'Solo' : alone ? 'Waiting for your friend' : `${participants.length} playing`}
             </p>
             <ConnectionBadge status={connection} />
           </div>
 
-          <PresenceRail players={players} myId={myId} variant="lobby" className="mt-3" />
+          <PresenceRail players={participants} myId={myId} variant="lobby" className="mt-3" />
+           {players.some(p=>p.spectator) && <p className="mt-2 text-xs text-[var(--fg-muted)]">
+             {players.filter(p=>p.spectator).length} spectator(s) watching
+           </p>}
 
           {alone && !solo ? (
             <p className="mt-4 flex items-center gap-2 rounded-md bg-[var(--surface-inset)] px-3 py-2.5 text-xs text-[var(--fg-muted)]">
@@ -193,7 +197,7 @@ export function Lobby({
 
         {/* ---- go --------------------------------------------------------- */}
         <div className="flex flex-col gap-2">
-          {!solo ? (
+          {!solo && !me?.spectator ? (
             <Button
               size="lg"
               variant={ready ? 'secondary' : 'primary'}
@@ -206,7 +210,9 @@ export function Lobby({
             </Button>
           ) : null}
 
-          {isHost ? (
+          {me?.spectator ? <p className="rounded-lg border border-sky-400/30 bg-sky-400/10 p-3 text-center text-sm text-sky-300">
+            You’re spectating. Watch the puzzle, join the chat, and enjoy the music.
+          </p> : isHost ? (
             <Button size="lg" variant="primary" className="w-full min-h-12 active:scale-[0.98] hover:-translate-y-0.5" onClick={onStart} disabled={!canStart}>
               <Icon name="sparkle" size={20} />
               {!cutReady

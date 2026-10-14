@@ -21,6 +21,7 @@ const NAV = [
   { href: '/', label: 'Home' },
   { href: '/play', label: 'Play' },
   { href: '/browse', label: 'Browse' },
+  { href: '/daily', label: 'Daily' },
   { href: '/my-puzzles', label: 'My Puzzles' },
 ] as const;
 

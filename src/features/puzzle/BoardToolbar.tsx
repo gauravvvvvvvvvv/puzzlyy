@@ -33,6 +33,7 @@ export interface BoardToolbarProps {
   onUndo: () => void;
   onRedo: () => void;
   onReact: (emoji: string) => void;
+  onSticker?: (symbol: string) => void;
   /** Arms or cancels "look here" — the board takes it from there. */
   onPing: () => void;
   pingArmed: boolean;
@@ -61,6 +62,7 @@ export function BoardToolbar({
   onUndo,
   onRedo,
   onReact,
+  onSticker,
   onPing,
   pingArmed,
   ghost,
@@ -121,6 +123,16 @@ export function BoardToolbar({
                   {emoji}
                 </button>
               ))}
+            </div>
+            <div className="mt-2 border-t border-[var(--line)] pt-2">
+              <p className="px-2 pb-1 text-xs text-[var(--fg-muted)]">Place a sticker: choose one, then tap the board</p>
+              <div className="flex flex-wrap gap-1">
+                {['⭐','🌼','👑','🦆','❤️','🎉'].map(symbol => (
+                  <button key={symbol} type="button" aria-label={'Place sticker '+symbol}
+                    className="grid size-10 place-items-center rounded-lg text-2xl hover:bg-[var(--surface-3)] active:scale-90"
+                    onClick={() => {onSticker?.(symbol); setOpen('none');}}>{symbol}</button>
+                ))}
+              </div>
             </div>
             <button
               type="button"

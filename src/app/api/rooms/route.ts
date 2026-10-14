@@ -12,6 +12,7 @@
  */
 
 import { isPlayable } from '@/lib/games';
+import { dailyFor } from '@/lib/daily';
 import { trustImageAsset } from '@/lib/images';
 import { createPuzzle } from '@/lib/puzzle/create';
 import { maybeSweep } from '@/lib/server/maintenance';
@@ -57,6 +58,8 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  const daily = body.daily === true ? dailyFor() : null;
+  if (daily && daily.image.id !== image.id) return fail('The daily puzzle changed. Refresh the page.', 409);
   const gameType = asGameType(body.gameType) ?? 'jigsaw';
   if (!isPlayable(gameType)) return fail('That game is not ready to play yet.', 400);
 
@@ -65,7 +68,8 @@ export async function POST(request: Request): Promise<Response> {
     image,
     settings,
     gameType,
-    title: asString(body.title, 80) ?? undefined,
+    title: daily ? 'Daily puzzle · ' + daily.day : asString(body.title, 80) ?? undefined,
+    seed: daily?.seed,
   });
 
   const roomSettings: RoomSettings = {
@@ -74,7 +78,7 @@ export async function POST(request: Request): Promise<Response> {
     hostCanForceStart: asBool(body.hostCanForceStart, true),
   };
 
-  const record = await createRoomSession({ puzzle, settings: roomSettings });
+  const record = await createRoomSession({ puzzle, settings: roomSettings, dailyKey: daily?.day });
   if (!record) return fail('Could not create a room just now. Please try again.', 503);
 
   // Best effort: keeps the puzzle resolvable on its own for challenge links and

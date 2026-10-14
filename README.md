@@ -361,3 +361,56 @@ The existing smoke tests remain useful for baseline puzzle correctness.
 ## License
 
 Puzzly is **source-available, not open source**. You may inspect the code for evaluation, learning, and security review, but you may not copy, modify, redistribute, sublicense, host, commercialize, or build derivative products from it without prior written permission. See [LICENSE](LICENSE).
+
+
+## Social playground additions
+
+- **Room music queue:** Paste YouTube video or playlist links, or Spotify track,
+  album, or playlist links in Room Chat → Shared jukebox. Everyone can add; the
+  host starts, pauses, selects and removes queue items. The queue and playback
+  time survive refreshes and subsequent puzzles.
+- **YouTube sync:** Each participant clicks *Listen together* to satisfy browser
+  playback-permission rules. The YouTube iframe API seeks within about three
+  seconds of the host playback clock; playback is not sample-accurate.
+- **Spotify limitation:** Spotify's official embed does not offer shared
+  programmatic play/pause/seek. A Spotify queue item is shared, and members
+  play it individually in the official embedded player. Truly synchronized
+  Spotify playback requires Spotify-specific OAuth, user account entitlements,
+  and the appropriate supported player APIs. Do not claim the embedded Spotify
+  audio is synchronized.
+- **Spectators:** A room keeps six interactive seats plus up to twenty viewers.
+  Full rooms admit newcomers as spectators automatically; append `?watch=1`
+  to the room link to join explicitly as a spectator. They can chat, react, add
+  music to the queue and send stickers. Server-side authorization blocks board
+  mutations, hints, starts and host-only controls.
+- **Themes:** Hosts choose Cozy, Arcade, Space or Beach in the social panel.
+  These change the local puzzle canvas palette without moving any pieces.
+- **Cooperation rewards:** Rapid connections trigger shared combo moments;
+  distinct teammates may trigger high-fives. Deterministic mystery and golden
+  pieces unlock surprise celebrations. Teammates collect encouraging awards.
+- **Board touches:** Light magnetic pull near valid snaps, supported-device
+  vibration on successful joins, ephemeral stickers and lightweight remote
+  cursor trails. Reduced-motion preferences disable decorative trails.
+- **Shared memories:** Results let players save a self-contained PNG postcard
+  locally, including the finished picture and their team's contributions.
+- **Daily puzzles:** `/daily` features a shared UTC image and deterministic
+  piece layout. Each group gets its own room and optional in-room friends
+  scoreboard, without a global account-based leaderboard.
+
+### Verification and deployment
+
+GitHub Actions workflows have intentionally been **removed**. No GitHub Actions
+CI run or branch build is configured. After cloning locally, validate with:
+
+    npm ci
+    npm run typecheck
+    npm run build
+    npm run dev
+    node scripts/smoke-social.mjs
+    node scripts/smoke-playground.mjs
+    node scripts/smoke.mjs
+
+The HTTP smoke scripts require the local development server to be running.
+YouTube/Spotify playback, device haptics, six-camera WebRTC calls and mobile
+layouts also require real-browser/device testing. The site host handles builds
+after the branch is merged; it is not connected to GitHub Actions.
