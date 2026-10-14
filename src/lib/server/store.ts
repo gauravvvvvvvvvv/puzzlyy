@@ -68,6 +68,9 @@ export interface SeatState {
   ready: boolean;
   joinedAt: number;
   lastSeenAt: number;
+  /** Per-seat chat flood protection, persisted across serverless requests. */
+  chatWindowAt?: number;
+  chatWindowCount?: number;
   /** Last meaningful interaction, excluding idle connection heartbeats. */
   activeAt?: number;
   /** Renewed during an active voice/video call only. */
