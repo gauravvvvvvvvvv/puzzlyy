@@ -339,6 +339,10 @@ function parseClientEvent(value: unknown): ClientEvent | null {
       return to && data && (kind === 'offer' || kind === 'answer' || kind === 'candidate')
         ? { t: 'rtc', to, data, kind } : null;
     }
+    case 'kick': {
+      const playerId = asString(raw.playerId, 40);
+      return playerId ? { t: 'kick', playerId } : null;
+    }
     case 'bye':
       return { t: 'bye' };
     default:
