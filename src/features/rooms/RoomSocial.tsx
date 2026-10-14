@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { RoomSession } from '@/hooks/useRoomSession';
+import { AmbientSoundscape } from '@/features/rooms/AmbientSoundscape';
 import { RoomJukebox } from '@/features/rooms/RoomJukebox';
 import { Icon } from '@/components/ui/Icon';
 import { useClipboard } from '@/hooks/useClipboard';
@@ -417,6 +418,7 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
             onClick={()=>session.reactNow(emoji,session.engine?.geometry.boardW ?? 0,session.engine?.geometry.boardH ?? 0)}
             className="grid size-10 place-items-center rounded-lg text-xl transition hover:bg-[var(--surface-inset)] active:scale-90">{emoji}</button>)}
         </div>}
+        <AmbientSoundscape />
         <div ref={pane} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3" aria-label="Room messages" role="log">
           {session.chat.length === 0 && <p className="mx-auto max-w-[16rem] py-8 text-center text-xs leading-relaxed text-[var(--fg-muted)]">
             Your conversation stays here when you play the next puzzle.

@@ -187,6 +187,7 @@ export function useRoomSession(code: string): RoomSession {
   const [result, setResult] = useState<SessionResult | null>(null);
 
   const [reactions, setReactions] = useState<ReactionBurst[]>([]);
+  const lastSharedReactionRef = useRef<{ emoji: string; playerId: string; at: number } | null>(null);
   const [pings, setPings] = useState<PingMark[]>([]);
   const [hint, setHint] = useState<HintNotice | null>(null);
   const [chat, setChat] = useState<ChatMessage[]>([]);
@@ -487,8 +488,16 @@ export function useRoomSession(code: string): RoomSession {
             x: event.x,
             y: event.y,
           };
-          setReactions((list) => [...list.slice(-11), burst]);
-          later(() => setReactions((list) => list.filter((r) => r.id !== burst.id)), REACTION_MS);
+          const previous = lastSharedReactionRef.current;
+          const combo = previous && previous.emoji === burst.emoji &&
+            previous.playerId !== burst.playerId && Date.now() - previous.at < 1800;
+          lastSharedReactionRef.current = { emoji: burst.emoji, playerId: burst.playerId, at: Date.now() };
+          const extra: ReactionBurst | null = combo
+            ? { ...burst, id: burst.id + ':together', emoji: '✨' }
+            : null;
+          setReactions((list) => [...list, burst, ...(extra ? [extra] : [])].slice(-14));
+          later(() => setReactions((list) => list.filter((r) =>
+            r.id !== burst.id && r.id !== extra?.id)), REACTION_MS);
           return;
         }
 
