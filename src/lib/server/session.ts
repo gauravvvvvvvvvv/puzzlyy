@@ -338,6 +338,9 @@ export async function joinRoom(code: string, input: JoinInput): Promise<Outcome<
 
     // --- Resume an existing seat -------------------------------------------
     if (input.playerId && input.token) {
+      // Kicked users must not be silently handed a fresh seat when they refresh.
+      if (record.kickedSeats?.includes(input.playerId))
+        return { ok: false, status: 403, error: 'You were removed from this room by the host.' };
       const seat = record.players.find((p) => p.id === input.playerId);
       if (seat && safeEqual(seat.token, input.token)) {
         seat.name = sanitizeName(input.name ?? seat.name);
@@ -584,6 +587,9 @@ export async function applyClientEvents(
           break;
         case 'tug':
           onTug(ctx, event);
+          break;
+        case 'kick':
+          onKick(ctx, event.playerId);
           break;
         case 'bye':
           onBye(ctx);
@@ -1229,6 +1235,33 @@ function onRestart(ctx: Ctx): void {
     view: buildView(ctx.record, ctx.engine, ctx.now),
     session: ctx.record.session,
   });
+}
+
+/** Host-only removal. Revoke the seat and its ability to resume, release
+ * all puzzle locks, and broadcast a terminal event to the removed listener. */
+function onKick(ctx: Ctx, playerId: string): void {
+  if (!ctx.seat.isHost || playerId === ctx.seat.id) return;
+  const target = ctx.record.players.find(p => p.id === playerId);
+  if (!target || target.isHost) return;
+
+  for (const groupId of ctx.engine.releaseAll(target.id)) {
+    delete ctx.record.locksAt[groupId];
+    emit(ctx, { t: 'release', playerId: target.id, g: groupId });
+  }
+  for (const [group, tug] of Object.entries(ctx.record.tugs ?? {})) {
+    if (tug.defender !== target.id && tug.challenger !== target.id) continue;
+    delete ctx.record.tugs?.[Number(group)];
+    emit(ctx, { t: 'tug', g: Number(group), contest: null });
+  }
+  ctx.record.players = ctx.record.players.filter(p => p.id !== target.id);
+  ctx.record.kickedSeats = [...(ctx.record.kickedSeats ?? []), target.id].slice(-100);
+  // The host's event must be delivered to the removed seat's existing stream,
+  // even though that seat can no longer authenticate future event requests.
+  emit(ctx, { t: 'kicked', playerId: target.id, name: target.name });
+  emit(ctx, { t: 'leave', playerId: target.id });
+  emit(ctx, { t: 'presence', players: publicRoster(ctx.record, ctx.now) });
+  touch(ctx);
+  save(ctx);
 }
 
 /** Explicit leave. Frees the seat immediately rather than waiting for expiry. */

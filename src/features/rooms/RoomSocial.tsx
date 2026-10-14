@@ -56,6 +56,7 @@ export function RoomSocial({ session, code, onLeave, themePreview, onThemePrevie
 }) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
+  const [chatExpanded, setChatExpanded] = useState(true);
   const { copied, copy, share, canShare } = useClipboard();
   const [inviteUrl, setInviteUrl] = useState('');
   const [inviteError, setInviteError] = useState(false);
@@ -300,9 +301,12 @@ export function RoomSocial({ session, code, onLeave, themePreview, onThemePrevie
   }, [rosterKey, notify, closePeer]);
 
   const latestCountRef = useRef(session.chat.length);
-  const chatOpenRef = useRef(open);
+  const chatOpenRef = useRef(false);
   const nearBottomRef = useRef(true);
-  chatOpenRef.current = open;
+  // Desktop has an always-visible sidebar; mobile also requires the drawer to
+  // be open. The conversation itself may be collapsed independently.
+  chatOpenRef.current = chatExpanded && (open ||
+    (typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches));
 
   useEffect(() => {
     const previous = latestCountRef.current;
@@ -316,12 +320,11 @@ export function RoomSocial({ session, code, onLeave, themePreview, onThemePrevie
   }, [session.chat.length]);
 
   useEffect(() => {
-    if (open) {
-      setUnread(0);
-      nearBottomRef.current = true;
-      if (pane.current) pane.current.scrollTop = pane.current.scrollHeight;
-    }
-  }, [open]);
+    if (!chatExpanded || (!open && !window.matchMedia('(min-width: 1024px)').matches)) return;
+    setUnread(0);
+    nearBottomRef.current = true;
+    if (pane.current) pane.current.scrollTop = pane.current.scrollHeight;
+  }, [open, chatExpanded]);
 
   useEffect(() => () => {
     for (const pc of pcs.current.values()) pc.close();
@@ -348,8 +351,8 @@ export function RoomSocial({ session, code, onLeave, themePreview, onThemePrevie
       {open && <button type="button" onClick={() => setOpen(false)}
         className="fixed inset-0 z-40 bg-black/35 lg:hidden" aria-label="Close room chat" />}
       <aside className={(open ? 'flex fixed inset-y-0 right-0 z-50 w-[min(94vw,420px)]' : 'hidden') +
-        ' lg:static lg:z-auto lg:flex lg:w-[min(30vw,380px)] shrink-0 min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-contain border-l border-[var(--line)] bg-[var(--surface)] shadow-xl lg:shadow-none'}>
-        <header className="sticky top-0 z-20 shrink-0 border-b border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+        ' lg:static lg:z-auto lg:flex lg:w-[min(30vw,380px)] shrink-0 min-h-0 flex-col overflow-hidden border-l border-[var(--line)] bg-[var(--surface)] shadow-xl lg:shadow-none'}>
+        <header className="relative z-20 shrink-0 border-b border-[var(--line)] bg-[var(--surface)] px-3 py-2">
           <div className="flex min-w-0 items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">Room chat</p>
@@ -393,6 +396,43 @@ export function RoomSocial({ session, code, onLeave, themePreview, onThemePrevie
           {hasMedia && <button type="button" onClick={() => setCallExpanded(value => !value)}
             className="mt-1 text-2xs text-[var(--fg-muted)] underline underline-offset-2">{callExpanded ? 'Minimize call' : 'Expand call'}</button>}
         </header>
+        {/* Room tools scroll on their own; the conversation and composer live
+            in a separate flex column so nothing can strand them mid-screen. */}
+        <div className={'min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain ' +
+          (chatExpanded ? 'max-h-[min(44dvh,420px)] shrink-0' : 'flex-1')}>
+        <details className="border-b border-[var(--line)] px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium">
+            People · {session.players.filter(p => !p.spectator).length} playing · {session.players.filter(p => p.spectator).length} watching
+          </summary>
+          <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto" aria-label="Room participants">
+            {session.players.map(person => (
+              <li key={person.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-[var(--surface-inset)] px-2 py-1.5">
+                <span aria-hidden="true" className="text-lg">{person.avatar}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-semibold">{person.name}{person.id === session.myId ? ' (you)' : ''}</span>
+                  <span className="block text-2xs text-[var(--fg-muted)]">
+                    {person.isHost ? 'Host' : person.spectator ? 'Spectator' : 'Player'} · {person.connected ? 'Online' : 'Away'}
+                  </span>
+                </span>
+                {session.isHost && person.id !== session.myId && !person.isHost && (
+                  <button type="button" aria-label={'Kick ' + person.name + ' from room'}
+                    onClick={() => {
+                      if (window.confirm('Remove ' + person.name + ' from this room?')) {
+                        session.send({ t: 'kick', playerId: person.id });
+                        session.flush();
+                      }
+                    }}
+                    className="min-h-9 shrink-0 rounded-lg border border-[var(--line)] px-2.5 text-xs text-[var(--color-danger-400)] hover:bg-[var(--surface-2)]">
+                    Kick
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          {session.isHost && <p className="mt-2 text-2xs text-[var(--fg-muted)]">
+            Removed members lose this seat and cannot resume it by refreshing.
+          </p>}
+        </details>
         <details className="border-b border-[var(--line)] px-3 py-3">
           <summary className="cursor-pointer text-sm font-medium">Room theme · {themePreview ?? session.room?.theme ?? 'cozy'}</summary>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -442,9 +482,41 @@ export function RoomSocial({ session, code, onLeave, themePreview, onThemePrevie
             onClick={()=>session.reactNow(emoji,session.engine?.geometry.boardW ?? 0,session.engine?.geometry.boardH ?? 0)}
             className="grid size-10 place-items-center rounded-lg text-xl transition hover:bg-[var(--surface-inset)] active:scale-90">{emoji}</button>)}
         </div>}
+        {session.history.length > 0 && (
+          <details className="border-t border-[var(--line)] px-3 py-2">
+            <summary className="cursor-pointer text-xs text-[var(--fg-muted)]">
+              Puzzles completed together ({session.history.length})
+            </summary>
+            <ul className="mt-2 max-h-24 space-y-1 overflow-auto">
+              {session.history.slice(-6).reverse().map(result => (
+                <li key={result.puzzleId} className="truncate text-xs">
+                  {result.puzzleTitle} · {result.pieceCount} pieces
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         <AmbientSoundscape roomTheme={session.room?.theme} />
-        <div ref={pane} className="flex min-h-48 max-h-[45dvh] shrink-0 flex-col gap-2 overflow-y-auto overscroll-contain p-3" aria-label="Room messages" role="log" aria-live="polite" aria-relevant="additions" onScroll={event => { const el = event.currentTarget; nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 72; }}>
-          {session.chat.length === 0 && <p className="mx-auto max-w-[16rem] py-8 text-center text-xs leading-relaxed text-[var(--fg-muted)]">
+        </div>
+        <section className={chatExpanded ? 'flex min-h-0 flex-1 flex-col' : 'shrink-0'} aria-label="Room conversation">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--surface)] px-3 py-1.5">
+            <button type="button" aria-expanded={chatExpanded} aria-controls="room-chat-messages"
+              onClick={() => setChatExpanded(value => !value)}
+              className="flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-1 text-left text-xs font-semibold hover:bg-[var(--surface-inset)]">
+              <Icon name="chevron-right" size={16} className={chatExpanded ? 'rotate-90 transition-transform' : 'transition-transform'}/>
+              <span>Chat</span>
+              {!chatExpanded && unread > 0 && <span className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-2xs">{unread} new</span>}
+            </button>
+            <button type="button" onClick={onLeave} title="Leave room" aria-label="Leave room"
+              className="flex min-h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-xs text-[var(--color-danger-400)] hover:bg-[var(--surface-inset)]">
+              <Icon name="arrow-left" size={15}/> Leave
+            </button>
+          </div>
+        <div ref={pane} id="room-chat-messages" className={(chatExpanded ? 'flex flex-col' : 'hidden') +
+          ' min-h-0 flex-1 gap-2 overflow-y-auto overscroll-contain p-3'} aria-label="Room messages"
+          role="log" aria-live="polite" aria-relevant="additions"
+          onScroll={event => { const el = event.currentTarget; nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 72; }}>
+          {session.chat.length === 0 && <p className="m-auto max-w-[16rem] text-center text-xs leading-relaxed text-[var(--fg-muted)]">
             Your conversation stays here when you play the next puzzle.
           </p>}
           {session.chat.map(entry => {
@@ -475,23 +547,10 @@ export function RoomSocial({ session, code, onLeave, themePreview, onThemePrevie
             );
           })}
         </div>
-        {typing && <p className="px-3 pb-1 text-2xs italic text-[var(--fg-muted)]">{typing} is typing…</p>}
-        {session.history.length > 0 && (
-          <details className="border-t border-[var(--line)] px-3 py-2">
-            <summary className="cursor-pointer text-xs text-[var(--fg-muted)]">
-              Puzzles completed together ({session.history.length})
-            </summary>
-            <ul className="mt-2 max-h-24 space-y-1 overflow-auto">
-              {session.history.slice(-6).reverse().map(result => (
-                <li key={result.puzzleId} className="truncate text-xs">
-                  {result.puzzleTitle} · {result.pieceCount} pieces
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-        <button type="button" onClick={onLeave} className="mx-3 mb-2 flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--line)] text-sm text-[var(--color-danger-400)] transition hover:bg-[var(--surface-inset)] active:scale-95"><Icon name="arrow-left" size={18} />Leave room</button>
-        <form onSubmit={sendMessage} className="sticky bottom-0 z-10 flex shrink-0 gap-2 border-t border-[var(--line)] bg-[var(--surface)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        {chatExpanded && typing && <p className="px-3 pb-1 text-2xs italic text-[var(--fg-muted)]">{typing} is typing…</p>}
+        <form onSubmit={sendMessage}
+          className={(chatExpanded ? 'flex' : 'hidden') +
+            ' z-10 shrink-0 items-center gap-2 border-t border-[var(--line)] bg-[var(--surface)] p-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]'}>
           <textarea rows={1} value={message} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} onChange={e => {
             setMessage(e.target.value);
             if (Date.now() - typingAt.current > 900) {
@@ -499,11 +558,12 @@ export function RoomSocial({ session, code, onLeave, themePreview, onThemePrevie
               notify({ t: 'typing', active: e.target.value.length > 0 });
             }
           }} maxLength={500}
-            placeholder="Message the room... (Shift+Enter for new line)" aria-label="Room message"
-            className="min-w-0 flex-1 resize-none rounded-lg border border-[var(--line)] bg-[var(--surface-inset)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" />
+            placeholder="Message…" aria-label="Room message" title="Shift+Enter for a new line"
+            className="min-h-11 min-w-0 flex-1 resize-none rounded-lg border border-[var(--line)] bg-[var(--surface-inset)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]" />
           <button disabled={!message.trim()} type="submit"
             className="min-h-11 rounded-lg bg-[var(--accent)] px-3 py-2 text-sm text-white transition-all hover:brightness-110 hover:shadow-md active:scale-95 disabled:opacity-40">Send</button>
         </form>
+        </section>
       </aside>
     </>
   );

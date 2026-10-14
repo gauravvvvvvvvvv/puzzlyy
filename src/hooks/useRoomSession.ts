@@ -278,6 +278,13 @@ export function useRoomSession(code: string): RoomSession {
 
       switch (event.t) {
         case 'snapshot': {
+          // A missed kick event must not leave the removed player playing
+          // locally when a transport reconnects and receives a new snapshot.
+          if (mine && !event.view.players.some(p => p.id === mine)) {
+            setFatal('You are no longer in this room.');
+            transportRef.current?.close();
+            return;
+          }
           setRoom(event.view.room);
           holdPuzzle(event.view.puzzle);
           setPlayers(event.view.players);
@@ -311,6 +318,18 @@ export function useRoomSession(code: string): RoomSession {
         case 'leave': {
           setPlayers((list) => list.filter((p) => p.id !== event.playerId));
           cursorsRef.current.delete(event.playerId);
+          return;
+        }
+
+        case 'kicked': {
+          if (event.playerId === mine) {
+            setFatal('You were removed from this room by the host.');
+            // Stop the room connection immediately. A kicked seat has no
+            // authority to send further events or resume via its saved token.
+            transportRef.current?.close();
+          } else {
+            setNotice(event.name + ' was removed from the room.');
+          }
           return;
         }
 

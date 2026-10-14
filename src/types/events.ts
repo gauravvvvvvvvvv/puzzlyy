@@ -66,6 +66,7 @@ export type ClientEvent =
   /** Authenticated signaling, never direct unauthenticated channel broadcasts. */
   | { t: 'media'; audio: boolean; video: boolean }
   | { t: 'rtc'; to: string; kind: 'offer' | 'answer' | 'candidate'; data: string }
+  | { t: 'kick'; playerId: string }
   | { t: 'bye' };
 
 export interface ClientEnvelope {
@@ -83,6 +84,7 @@ export type ServerEvent =
   | { t: 'snapshot'; seq: number; view: RoomView; session: PuzzleSessionState | null }
   | { t: 'join'; player: Player }
   | { t: 'leave'; playerId: string }
+  | { t: 'kicked'; playerId: string; name: string }
   | { t: 'presence'; players: Player[] }
   | { t: 'ready'; playerId: string; ready: boolean }
   | { t: 'status'; status: RoomStatus }

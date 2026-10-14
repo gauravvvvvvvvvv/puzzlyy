@@ -96,6 +96,9 @@ export interface RoomRecord {
   session: PuzzleSessionState | null;
   /** The roster. Present on every record written by the current code. */
   players: SeatState[];
+  /** Kicked seat ids cannot silently resume or rejoin with stale credentials.
+   * This is not a permanent account ban: anonymous users can change identity. */
+  kickedSeats?: string[];
   /** Monotonic broadcast counter, so clients can detect a dropped event. */
   seq: number;
   /**

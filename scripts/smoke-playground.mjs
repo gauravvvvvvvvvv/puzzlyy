@@ -68,5 +68,27 @@ await send(viewerSeat,[{t:'grab',g:0},{t:'hint',level:4}]);
 room=await request(path);
 test('spectator cannot grab puzzle pieces or spend hints',room.body.view?.session?.hintsUsed===0 &&
  !room.body.session?.locks?.['0']);
+// Kicks are authoritative: non-hosts cannot remove anyone, and even a host
+// cannot kick themselves. Spectators and players are both removable.
+await send(viewerSeat,[{t:'kick',playerId:host.playerId}]);
+await send(host,[{t:'kick',playerId:host.playerId}]);
+room=await request(path);
+test('spectators cannot kick the host and host cannot kick self',
+ room.body.view?.players?.some(p=>p.id===host.playerId));
+await send(host,[{t:'kick',playerId:viewerSeat.playerId}]);
+room=await request(path);
+test('host kicks spectator out of roster',
+ !room.body.view?.players?.some(p=>p.id===viewerSeat.playerId));
+const kickedEvents=await send(viewerSeat,[{t:'chat',text:'Still here?'}]);
+test('kicked spectator loses event authority',kickedEvents.status===401);
+const resume=await request(path+'/join',{
+ name:'Viewer',avatar:'🐼',playerId:viewerSeat.playerId,token:viewerSeat.token,watch:true,
+});
+test('kicked spectator cannot resume old seat',resume.status===403);
+const other=seats[1];
+await send(host,[{t:'kick',playerId:other.playerId}]);
+room=await request(path);
+test('host can kick an interactive player',
+ !room.body.view?.players?.some(p=>p.id===other.playerId));
 console.log(failures?failures+' checks failed':'All playground checks passed');
 if(failures)process.exitCode=1;
