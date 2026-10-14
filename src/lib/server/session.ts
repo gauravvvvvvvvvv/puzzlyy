@@ -38,6 +38,11 @@ import type {
   Room,
   TugState,
   RoomSettings,
+  RoomTheme,
+  MusicTrack,
+  MusicState,
+  RoomMoment,
+  RoomAchievement,
   RoomView,
   SessionResult,
 } from '@/types/models';
@@ -91,6 +96,7 @@ export function toPublicPlayer(seat: SeatState, now: number): Player {
     avatar: seat.avatar,
     colorId: seat.colorId,
     isHost: seat.isHost,
+    spectator: seat.spectator ?? false,
     ready: seat.ready,
     connected: now - seat.lastSeenAt < PRESENCE_TTL_MS,
     joinedAt: seat.joinedAt,
@@ -113,6 +119,10 @@ function buildView(record: RoomRecord, engine: PuzzleEngine, now: number): RoomV
     chat: record.chat ?? [],
     tugs: Object.values(record.tugs ?? {}),
     history: record.history ?? [],
+    music: record.music ?? { queue: [], current: 0, playing: false, position: 0, updatedAt: now },
+    stickers: (record.stickers ?? []).filter(x => now - x.at < 11000),
+    moments: (record.moments ?? []).slice(-20),
+    achievements: (record.achievements ?? []).slice(-40),
     session: {
       status: engine.status,
       startedAt: engine.startedAt,
@@ -246,6 +256,7 @@ function clampCoord(v: number, max: number): number {
 export interface CreateRoomInput {
   puzzle: Puzzle;
   settings: RoomSettings;
+  dailyKey?: string;
 }
 
 /**
@@ -271,6 +282,8 @@ export async function createRoomSession(input: CreateRoomInput): Promise<RoomRec
       updatedAt: now,
       expiresAt: now + ROOM_TTL_MS,
       round: 1,
+      theme: 'cozy',
+      dailyKey: input.dailyKey,
     };
     const record: RoomRecord = {
       room,
@@ -282,6 +295,10 @@ export async function createRoomSession(input: CreateRoomInput): Promise<RoomRec
       chat: [],
       tugs: {},
       history: [],
+      music: { queue: [], current: 0, playing: false, position: 0, updatedAt: now },
+      stickers: [],
+      moments: [],
+      achievements: [],
     };
     if (await store.createRoom(record)) return record;
     // Code collision (or a transient failure); try another code.
@@ -299,6 +316,7 @@ export interface JoinInput {
   /** Present when resuming: a refresh mid-puzzle must not consume a new seat. */
   playerId?: string;
   token?: string;
+  watch?: boolean;
 }
 
 export interface JoinPayload {
@@ -352,18 +370,21 @@ export async function joinRoom(code: string, input: JoinInput): Promise<Outcome<
     }
 
     // --- New seat -----------------------------------------------------------
-    if (record.players.length >= MAX_PLAYERS) {
-      return { ok: false, status: 409, error: 'This room is full.' };
-    }
+    // Spectators never consume one of six interactive seats.
+    const playerCount = record.players.filter(p => !p.spectator).length;
+    const watch = Boolean(input.watch || playerCount >= MAX_PLAYERS);
+    if (watch && record.players.filter(p => p.spectator).length >= 20)
+      return { ok: false, status: 409, error: 'The spectator gallery is full.' };
 
-    const taken = record.players.map((p) => p.colorId);
-    const isHost = record.players.length === 0;
+    const taken = record.players.filter(p => !p.spectator).map((p) => p.colorId);
+    const isHost = !watch && !record.players.some(p => !p.spectator);
     const seat: SeatState = {
       id: createId('p', 10),
       name: sanitizeName(input.name),
       avatar: sanitizeAvatar(input.avatar),
       colorId: nextColorId(taken) as PlayerColorId,
       isHost,
+      spectator: watch,
       ready: false,
       joinedAt: now,
       lastSeenAt: now,
@@ -484,6 +505,11 @@ export async function applyClientEvents(
     expireInactiveSeats(ctx);
 
     for (const event of events) {
+      if (seat.spectator && !['alive', 'resync', 'chat', 'typing', 'react',
+          'media', 'rtc', 'music', 'sticker', 'bye'].includes(event.t)) {
+        emitTo(ctx, seat.id, { t: 'reject', reason: 'Spectators can watch, chat, and react, but not move pieces.' });
+        continue;
+      }
       if (event.t !== 'alive' && event.t !== 'resync' && event.t !== 'cursor' &&
           event.t !== 'move' && event.t !== 'typing' && event.t !== 'rtc') {
         seat.activeAt = now;
@@ -540,6 +566,15 @@ export async function applyClientEvents(
           break;
         case 'chat':
           onChat(ctx, event.text);
+          break;
+        case 'music':
+          onMusic(ctx, event);
+          break;
+        case 'theme':
+          onTheme(ctx, event.theme);
+          break;
+        case 'sticker':
+          onSticker(ctx, event);
           break;
         case 'media':
           onMedia(ctx, event);
@@ -652,6 +687,90 @@ function onPing(ctx: Ctx, event: Extract<ClientEvent, { t: 'ping' }>): void {
   });
 }
 
+
+
+function onMusic(ctx: Ctx, event: Extract<ClientEvent, { t: 'music' }>): void {
+  const music: MusicState = ctx.record.music ?? { queue: [], current: 0, playing: false, position: 0, updatedAt: ctx.now };
+  // Everyone may add a supported track. Only the host can control playback.
+  if (event.action === 'add' && event.track) {
+    if (music.queue.length >= 40) return;
+    const track: MusicTrack = { ...event.track, id: createId('track', 8), addedBy: ctx.seat.name };
+    music.queue.push(track);
+    if (music.queue.length === 1) { music.current = 0; music.position = 0; }
+  } else {
+    if (!ctx.seat.isHost) return;
+    if (event.action === 'play' || event.action === 'pause') {
+      if (music.playing) music.position += (ctx.now - music.updatedAt) / 1000;
+      music.playing = event.action === 'play' && music.queue.length > 0;
+    } else if (event.action === 'next') {
+      music.current = music.queue.length ? (music.current + 1) % music.queue.length : 0;
+      music.position = 0;
+    } else if (event.action === 'select' && event.index !== undefined && event.index < music.queue.length) {
+      music.current = event.index;
+      music.position = 0;
+    } else if (event.action === 'remove' && event.index !== undefined && event.index < music.queue.length) {
+      music.queue.splice(event.index, 1);
+      music.current = Math.min(music.current, Math.max(0, music.queue.length - 1));
+      music.position = 0;
+      if (!music.queue.length) music.playing = false;
+    } else if (event.action === 'seek' && event.position !== undefined) {
+      music.position = event.position;
+    } else return;
+  }
+  music.updatedAt = ctx.now;
+  ctx.record.music = music;
+  emit(ctx, { t: 'music', state: music });
+  ctx.dirty = true;
+  touch(ctx);
+}
+
+function onTheme(ctx: Ctx, theme: RoomTheme): void {
+  if (!ctx.seat.isHost) return;
+  ctx.record.room.theme = theme;
+  emit(ctx, { t: 'theme', theme });
+  ctx.dirty = true;
+}
+
+function onSticker(ctx: Ctx, event: Extract<ClientEvent, { t: 'sticker' }>): void {
+  const sticker = {
+    id: createId('sticker', 8), playerId: ctx.seat.id, symbol: event.symbol,
+    x: event.x, y: event.y, at: ctx.now,
+  };
+  ctx.record.stickers = [...(ctx.record.stickers ?? []).filter(x => ctx.now - x.at < 11000), sticker].slice(-35);
+  emitLoose(ctx, { t: 'sticker', sticker });
+  ctx.dirty = true;
+}
+
+function award(ctx: Ctx, name: string, type: RoomAchievement['type']): void {
+  if ((ctx.record.achievements ?? []).some(a => a.playerId === ctx.seat.id && a.type === type &&
+      a.at > (ctx.engine.startedAt ?? 0))) return;
+  const achievement: RoomAchievement = { playerId: ctx.seat.id, name, type, at: ctx.now };
+  ctx.record.achievements = [...(ctx.record.achievements ?? []).slice(-39), achievement];
+  emit(ctx, { t: 'achievement', achievement });
+}
+function celebrate(ctx: Ctx, kind: RoomMoment['kind'], label: string): void {
+  const moment: RoomMoment = { id: createId('moment', 8), kind, label,
+    playerId: ctx.seat.id, at: ctx.now };
+  ctx.record.moments = [...(ctx.record.moments ?? []).slice(-19), moment];
+  emitLoose(ctx, { t: 'moment', moment });
+}
+function onConnectPieces(ctx: Ctx, connections: number, pieceId: number): void {
+  if (connections < 1) return;
+  if (ctx.seat.connections === connections) award(ctx, 'First connection', 'first');
+  const previous = ctx.record.lastCombo;
+  const within = previous && ctx.now - previous.at < 6500;
+  const count = within ? previous.count + 1 : 1;
+  ctx.record.lastCombo = { playerId: ctx.seat.id, at: ctx.now, count };
+  if (within && previous.playerId !== ctx.seat.id) celebrate(ctx, 'high-five', 'Team high five!');
+  if (count > 1 && count % 3 === 0) {
+    celebrate(ctx, 'combo', count + '-connection combo!');
+    award(ctx, 'Combo builder', 'streak');
+  }
+  const golden = ctx.record.puzzle.seed % ctx.record.puzzle.pieceCount;
+  if (pieceId === golden) celebrate(ctx, 'golden', 'Golden piece found!');
+  if (pieceId === (ctx.record.puzzle.seed >>> 4) % ctx.record.puzzle.pieceCount)
+    celebrate(ctx, 'mystery', 'Mystery piece unlocked!');
+}
 
 /** Chat is tied to the room, not to any individual puzzle round. */
 function onChat(ctx: Ctx, raw: string): void {
@@ -771,7 +890,7 @@ function onReady(ctx: Ctx, ready: boolean): void {
   // Everyone ready is the common case for two friends, so start without making
   // the host reach for a button. Uses stored `ready` flags only — the server
   // has no socket to derive presence from.
-  const roster = ctx.record.players;
+  const roster = ctx.record.players.filter(p => !p.spectator);
   if (roster.length >= 2 && roster.every((p) => p.ready)) onStart(ctx, true);
 }
 
@@ -780,7 +899,7 @@ function onStart(ctx: Ctx, auto: boolean): void {
   if (!auto) {
     // Only the host may start early, and only if the room allows it (spec §7).
     if (!ctx.seat.isHost) return;
-    if (!ctx.record.room.settings.hostCanForceStart && ctx.record.players.length > 1) return;
+    if (!ctx.record.room.settings.hostCanForceStart && ctx.record.players.filter(p => !p.spectator).length > 1) return;
   }
   ctx.record.room.status = 'playing';
   ctx.engine.status = 'playing';
@@ -793,7 +912,7 @@ function onStart(ctx: Ctx, auto: boolean): void {
 /* --- play ----------------------------------------------------------------- */
 
 function onGrab(ctx: Ctx, groupId: number): void {
-  if (ctx.record.room.status !== 'playing') return;
+  if (ctx.record.room.status !== 'playing' || ctx.seat.spectator) return;
   if (!Number.isInteger(groupId)) return;
 
   // Already ours: this is a lock refresh during a long drag.
@@ -844,6 +963,7 @@ function onDrop(ctx: Ctx, event: Extract<ClientEvent, { t: 'drop' }>): void {
 
   for (const merge of result.merges) {
     ctx.seat.connections += merge.connections;
+    onConnectPieces(ctx, merge.connections, event.g);
     // Absorbed groups no longer exist, so neither should their lock stamps.
     for (const gone of merge.from) delete ctx.record.locksAt[gone];
     emit(ctx, {
@@ -1022,10 +1142,11 @@ function expireInactiveSeats(ctx: Ctx): void {
     ctx.record.players = ctx.record.players.filter(p => p.id !== seat.id);
     emit(ctx, { t: 'leave', playerId: seat.id });
   }
-  if (!ctx.record.players.some(p => p.isHost) && ctx.record.players.length) {
-    const next = [...ctx.record.players].sort((a, b) => a.joinedAt - b.joinedAt)[0];
-    next.isHost = true;
-    ctx.record.room.hostId = next.id;
+  if (!ctx.record.players.some(p => p.isHost)) {
+    const next = ctx.record.players.filter(p=>!p.spectator)
+      .sort((a,b)=>a.joinedAt-b.joinedAt)[0];
+    if (next) {next.isHost = true; ctx.record.room.hostId = next.id;}
+    else ctx.record.room.hostId = '';
   }
   emit(ctx, { t: 'presence', players: publicRoster(ctx.record, ctx.now) });
   save(ctx);
@@ -1110,10 +1231,12 @@ function onBye(ctx: Ctx): void {
 
   // Hand the host badge to whoever has been here longest.
   if (ctx.record.room.hostId === seat.id) {
-    const next = [...ctx.record.players].sort((a, b) => a.joinedAt - b.joinedAt)[0];
+    const next = ctx.record.players.filter(p=>!p.spectator).sort((a, b) => a.joinedAt - b.joinedAt)[0];
     if (next) {
       for (const p of ctx.record.players) p.isHost = p.id === next.id;
       ctx.record.room.hostId = next.id;
+    } else {
+      ctx.record.room.hostId = '';
     }
   }
   emit(ctx, { t: 'leave', playerId: seat.id });
@@ -1129,6 +1252,16 @@ function finish(ctx: Ctx): void {
   ctx.engine.completedAt ??= ctx.now;
   touch(ctx);
   save(ctx);
+  award(ctx, 'Final piece hero', 'closer');
+  for (const participant of ctx.record.players.filter(p => !p.spectator && p.connections > 0)) {
+    const achievement: RoomAchievement = {playerId:participant.id, name:'Puzzle teammate',
+      type:'helper', at:ctx.now};
+    if (!(ctx.record.achievements ?? []).some(a=>a.type==='helper' &&
+      a.playerId===participant.id && a.at>=(ctx.engine.startedAt ?? 0))) {
+      ctx.record.achievements = [...(ctx.record.achievements ?? []).slice(-39),achievement];
+      emit(ctx,{t:'achievement',achievement});
+    }
+  }
   const result = buildResult(ctx.record, ctx.engine, ctx.now);
   ctx.record.history = [...(ctx.record.history ?? []).slice(-29), result];
   emit(ctx, {
@@ -1144,7 +1277,8 @@ export function buildResult(
   now: number,
 ): SessionResult {
   const totalCredit = [...engine.credit.values()].reduce((a, b) => a + b, 0) || 1;
-  const players: ResultPlayer[] = publicRoster(record, now).map((p) => {
+  const players: ResultPlayer[] = publicRoster(record, now)
+    .filter(p => !p.spectator).map((p) => {
     const credit = engine.credit.get(p.id) ?? 0;
     return {
       id: p.id,

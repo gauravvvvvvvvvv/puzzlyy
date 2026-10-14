@@ -39,6 +39,11 @@ import type {
 } from '@/types/events';
 import type {
   ChatMessage,
+  RoomTheme,
+  MusicState,
+  RoomSticker,
+  RoomMoment,
+  RoomAchievement,
   TugState,
   ImageAsset,
   PuzzleSettings,
@@ -127,6 +132,10 @@ export interface RoomSession {
   clearHint: () => void;
   previewHint: (level: 1 | 2 | 3 | 4) => void;
   chat: ChatMessage[];
+  music: MusicState;
+  stickers: RoomSticker[];
+  moments: RoomMoment[];
+  achievements: RoomAchievement[];
   tugs: TugState[];
   contested: { g: number; id: number } | null;
   history: SessionResult[];
@@ -136,6 +145,7 @@ export interface RoomSession {
   decodeSignal: (sealed: string) => Promise<string>;
   sendChat: (text: string) => void;
   reactNow: (emoji: string, x: number, y: number) => void;
+  stickerNow: (symbol: string, x: number, y: number) => void;
 
   send: (event: ClientEvent) => void;
   flush: () => void;
@@ -180,6 +190,10 @@ export function useRoomSession(code: string): RoomSession {
   const [pings, setPings] = useState<PingMark[]>([]);
   const [hint, setHint] = useState<HintNotice | null>(null);
   const [chat, setChat] = useState<ChatMessage[]>([]);
+  const [music, setMusic] = useState<MusicState>({queue: [], current: 0, playing: false, position: 0, updatedAt: 0});
+  const [stickers, setStickers] = useState<RoomSticker[]>([]);
+  const [moments, setMoments] = useState<RoomMoment[]>([]);
+  const [achievements, setAchievements] = useState<RoomAchievement[]>([]);
   const [history, setHistory] = useState<SessionResult[]>([]);
   const [tugs, setTugs] = useState<TugState[]>([]);
   const [contested, setContested] = useState<{g:number;id:number} | null>(null);
@@ -267,6 +281,10 @@ export function useRoomSession(code: string): RoomSession {
           holdPuzzle(event.view.puzzle);
           setPlayers(event.view.players);
           setChat(event.view.chat ?? []);
+          setMusic(event.view.music ?? { queue: [], current: 0, playing: false, position: 0, updatedAt: 0 });
+          setStickers(event.view.stickers ?? []);
+          setMoments(event.view.moments ?? []);
+          setAchievements(event.view.achievements ?? []);
           setHistory(event.view.history ?? []);
           setTugs(event.view.tugs ?? []);
           tugsRef.current = event.view.tugs ?? [];
@@ -351,6 +369,27 @@ export function useRoomSession(code: string): RoomSession {
             .catch(() => undefined);
           return;
         }
+        case 'music':
+          setMusic(event.state);
+          return;
+        case 'theme':
+          setRoom(v => v ? { ...v, theme: event.theme } : v);
+          return;
+        case 'sticker':
+          setStickers(list => [...list.filter(x =>
+            x.id !== event.sticker.id &&
+            !(x.id.startsWith('local:') && x.playerId === event.sticker.playerId &&
+            x.symbol === event.sticker.symbol && Math.abs(x.at-event.sticker.at) < 7000)).slice(-30),
+            event.sticker]);
+          later(() => setStickers(list => list.filter(x => x.id !== event.sticker.id)), 10000);
+          return;
+        case 'moment':
+          setMoments(list => [...list.slice(-15), event.moment]);
+          setNotice(event.moment.label);
+          return;
+        case 'achievement':
+          setAchievements(list => [...list.slice(-39), event.achievement]);
+          return;
         case 'tug': {
           const next = [
             ...tugsRef.current.filter(t => t.g !== event.g),
@@ -533,6 +572,7 @@ export function useRoomSession(code: string): RoomSession {
           avatar: identity.avatar,
           playerId: seat?.playerId,
           token: seat?.token,
+          watch: typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('watch') === '1',
         });
         if (cancelled) return;
 
@@ -546,6 +586,10 @@ export function useRoomSession(code: string): RoomSession {
         holdPuzzle(join.view.puzzle);
         setPlayers(join.view.players);
         setChat(join.view.chat ?? []);
+        setMusic(join.view.music ?? { queue: [], current: 0, playing: false, position: 0, updatedAt: 0 });
+        setStickers(join.view.stickers ?? []);
+        setMoments(join.view.moments ?? []);
+        setAchievements(join.view.achievements ?? []);
         setHistory(join.view.history ?? []);
         setTugs(join.view.tugs ?? []);
         tugsRef.current = join.view.tugs ?? [];
@@ -670,6 +714,16 @@ export function useRoomSession(code: string): RoomSession {
     transportRef.current?.flush();
   }, [later]);
 
+  const stickerNow = useCallback((symbol: string, x: number, y: number) => {
+    if (!myIdRef.current) return;
+    const sticker: RoomSticker = {id:'local:'+Date.now().toString(36), symbol, x, y,
+      playerId:myIdRef.current,at:Date.now()};
+    setStickers(list=>[...list.slice(-30),sticker]);
+    later(()=>setStickers(list=>list.filter(p=>p.id!==sticker.id)),10000);
+    transportRef.current?.send({t:'sticker',symbol,x,y});
+    transportRef.current?.flush();
+  },[later]);
+
   const sendChat = useCallback((text: string) => {
     const value = text.trim().slice(0, 500);
     if (!value || !myIdRef.current) return;
@@ -772,6 +826,10 @@ export function useRoomSession(code: string): RoomSession {
     clearHint,
     previewHint,
     chat,
+    music,
+    stickers,
+    moments,
+    achievements,
     tugs,
     contested,
     history,
@@ -781,6 +839,7 @@ export function useRoomSession(code: string): RoomSession {
     decodeSignal,
     sendChat,
     reactNow,
+    stickerNow,
     send,
     flush,
     subscribe,

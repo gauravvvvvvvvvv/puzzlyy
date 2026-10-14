@@ -313,7 +313,9 @@ for (let i = 0; i < 6; i += 1) {
   });
   if (lastJoin.status !== 200) break;
 }
-ok('a full room turns people away with a reason', lastJoin.status === 409 || lastJoin.status === 403, `status=${lastJoin.status} body=${JSON.stringify(lastJoin.body)}`);
+ok('a full room admits spectators without a puzzle seat', lastJoin.status === 200 &&
+    lastJoin.body?.player?.spectator === true,
+    `status=${lastJoin.status} body=${JSON.stringify(lastJoin.body)}`);
 
 /* --- 11. secrets (criterion 12) ------------------------------------------ */
 

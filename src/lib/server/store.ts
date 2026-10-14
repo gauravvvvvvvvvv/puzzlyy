@@ -30,6 +30,11 @@
 import type {
   Challenge,
   ChatMessage,
+  RoomTheme,
+  MusicState,
+  RoomSticker,
+  RoomMoment,
+  RoomAchievement,
   TugState,
   SessionResult,
   ImageAsset,
@@ -69,6 +74,7 @@ export interface SeatState {
   mediaAt?: number;
   /** Piece connections this player has made, for the results split. */
   connections: number;
+  spectator?: boolean;
   /** Secret bearer token. Never broadcast, never sent to another player. */
   token: string;
   /** Token-bucket state, so rate limiting is exact rather than per-instance. */
@@ -101,6 +107,11 @@ export interface RoomRecord {
   chat?: ChatMessage[];
   tugs?: Record<number, TugState>;
   history?: SessionResult[];
+  music?: MusicState;
+  stickers?: RoomSticker[];
+  moments?: RoomMoment[];
+  achievements?: RoomAchievement[];
+  lastCombo?: { playerId: string; at: number; count: number };
 }
 
 /** A record plus the row version it was read at, for compare-and-swap. */
@@ -556,6 +567,11 @@ function migrate(record: RoomRecord): RoomRecord {
     chat: Array.isArray(record.chat) ? record.chat : [],
     tugs: record.tugs && typeof record.tugs === 'object' ? record.tugs : {},
     history: Array.isArray(record.history) ? record.history : [],
+    music: record.music,
+    stickers: Array.isArray(record.stickers) ? record.stickers : [],
+    moments: Array.isArray(record.moments) ? record.moments : [],
+    achievements: Array.isArray(record.achievements) ? record.achievements : [],
+    lastCombo: record.lastCombo,
   };
 }
 

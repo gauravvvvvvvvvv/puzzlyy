@@ -474,3 +474,30 @@
 @media (prefers-reduced-motion: reduce) {
   .puzzly-tug-board { animation: none !important; }
 }
+
+/* Room-local surfaces. Never change global site theme or puzzle geometry. */
+[data-room-theme="cozy"] { --board-bg:#252027; --board-slot:rgba(250,216,175,.055); }
+[data-room-theme="arcade"] { --board-bg:#141326; --board-slot:rgba(180,120,255,.085); --accent:#f77764; }
+[data-room-theme="space"] { --board-bg:#0c142d; --board-slot:rgba(106,163,255,.085); --accent:#83a8f8; }
+[data-room-theme="beach"] { --board-bg:#172b31; --board-slot:rgba(244,198,127,.07); --accent:#ffb66e; }
+
+@keyframes puzzly-trail-fade { from {opacity:.8; scale:1} to {opacity:0; scale:.15} }
+@keyframes puzzly-sticker-pop {
+  0% {opacity:0; scale:.3; rotate:-20deg}
+  7%,75% {opacity:1; scale:1; rotate:0deg}
+  100% {opacity:0; scale:.7; rotate:25deg}
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-trail] {display:none}
+  [data-world] {animation-duration:0s!important}
+}
+
+@keyframes puzzly-moment-pop {
+ from {transform:scale(.94);opacity:.8}
+ to {transform:scale(1.05);opacity:1}
+}
+
+@keyframes puzzly-mystery-glow {
+  0%,100% {opacity:.45; scale:.8; filter:drop-shadow(0 0 2px #f5bd4f)}
+  50% {opacity:1; scale:1.2; filter:drop-shadow(0 0 8px #ffd074)}
+}

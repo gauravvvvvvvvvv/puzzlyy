@@ -58,6 +58,8 @@ export interface PuzzleBoardProps {
    * places the ping instead of picking up a piece.
    */
   pingArmed: boolean;
+  stickerArmed?: string | null;
+  onPlaceSticker?: (symbol: string, point: {x: number; y: number}) => void;
   /** The chosen spot in board coordinates, or `null` if the player backed out. */
   onPlacePing: (point: { x: number; y: number } | null) => void;
   onError: (message: string) => void;
@@ -88,6 +90,8 @@ export function PuzzleBoard({
   edgeFocus,
   frozen,
   pingArmed,
+  stickerArmed,
+  onPlaceSticker,
   onPlacePing,
   onError,
   onActed,
@@ -108,6 +112,7 @@ export function PuzzleBoard({
   const lastHoverHitAt = useRef(0);
 
   /** Read inside handlers and the rAF loop, where props would be stale. */
+  const trailAtRef = useRef(new Map<string, number>());
   const playersRef = useRef<Player[]>(session.players);
   playersRef.current = session.players;
   const engineRef = useRef(engine);
@@ -116,6 +121,10 @@ export function PuzzleBoard({
   frozenRef.current = frozen;
   const motionRef = useRef(reducedMotion);
   motionRef.current = reducedMotion;
+  const stickerArmedRef = useRef(stickerArmed);
+  stickerArmedRef.current = stickerArmed;
+  const stickerCallback = useRef(onPlaceSticker);
+  stickerCallback.current = onPlaceSticker;
   const pingArmedRef = useRef(pingArmed);
   pingArmedRef.current = pingArmed;
 
@@ -160,7 +169,7 @@ export function PuzzleBoard({
         engine,
         atlas,
         image,
-        theme: readTheme(),
+        theme: readTheme(canvas),
         reducedMotion: motionRef.current,
       });
     } catch (cause) {
@@ -254,7 +263,7 @@ export function PuzzleBoard({
   // The palette lives in CSS, so the canvas has to be told when it changes.
   useEffect(() => {
     const target = document.documentElement;
-    const sync = () => rendererRef.current?.setTheme(readTheme());
+    const sync = () => rendererRef.current?.setTheme(readTheme(canvasRef.current));
     const observer = new MutationObserver(sync);
     observer.observe(target, { attributes: true, attributeFilter: ['data-theme'] });
     const media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -263,7 +272,7 @@ export function PuzzleBoard({
       observer.disconnect();
       media.removeEventListener('change', sync);
     };
-  }, [rendererRef]);
+  }, [rendererRef, session.room?.theme]);
 
   /* --- hints ------------------------------------------------------------- */
 
@@ -339,6 +348,37 @@ export function PuzzleBoard({
       for (const el of overlay.querySelectorAll<HTMLElement>('[data-world]')) {
         const point = renderer.screenFromWorld(Number(el.dataset.wx), Number(el.dataset.wy));
         el.style.transform = `translate3d(${point.x}px, ${point.y}px, 0)`;
+      }
+
+      // Tiny cursor trails use pooled DOM and expire naturally. Limit sampling
+      // to avoid allocating nodes for each pointer frame.
+      if (!motionRef.current) {
+        for (const [id, mark] of cursorsRef.current) {
+          if (!mark.down || Date.now() - mark.at > 700) continue;
+          const last = trailAtRef.current.get(id) ?? 0;
+          if (Date.now() - last < 85 || overlay.querySelectorAll('[data-trail]').length > 80) continue;
+          trailAtRef.current.set(id, Date.now());
+          const spot = renderer.screenFromWorld(mark.x, mark.y);
+          const dot = document.createElement('span');
+          dot.dataset.trail = '';
+          dot.className = 'pointer-events-none absolute size-1.5 rounded-full shadow-sm';
+          const player = playersRef.current.find(p => p.id === id);
+          dot.style.background = player ? playerColor(player.colorId) : '#f89e6b';
+          dot.style.transform = 'translate3d(' + spot.x + 'px,' + spot.y + 'px,0)';
+          dot.style.animation = 'puzzly-trail-fade .55s ease-out forwards';
+          dot.onanimationend = () => dot.remove();
+          overlay.appendChild(dot);
+        }
+      }
+      const secret = overlay.querySelector<HTMLElement>('[data-secret-piece]');
+      if (secret) {
+        const id = Number(secret.dataset.secretPiece);
+        if (engineRef.current.isPlaceable(id)) {
+          const w = engineRef.current.pieceWorld(id);
+          const screen = renderer.screenFromWorld(w.x, w.y);
+          secret.style.display = 'block';
+          secret.style.transform = 'translate3d(' + screen.x + 'px,' + screen.y + 'px,0)';
+        } else secret.style.display = 'none';
       }
 
       // Cursors are built by hand: they change many times a second and must
@@ -447,6 +487,12 @@ export function PuzzleBoard({
 
       const world = renderer.worldFromScreen(screen.x, screen.y);
       pointerRef.current = world;
+
+      if (stickerArmedRef.current && !frozenRef.current) {
+        stickerCallback.current?.(stickerArmedRef.current, {x: world.x, y: world.y});
+        gestureRef.current = {kind: 'none'};
+        return;
+      }
 
       // "Look here" is waiting for a spot, so this tap chooses it rather than
       // picking up a piece. A secondary button backs out — the same gesture that
@@ -582,6 +628,12 @@ export function PuzzleBoard({
         // Show where it would land. The engine already knows, so this costs one
         // neighbour scan rather than a second implementation of snapping.
         const snap = engineNow.snapPieces(gesture.g);
+        if (snap && snap.dist < engineNow.geometry.snapDistance * 0.65) {
+          // Magnetism stays client-side. Apply a small attraction only near a
+          // valid neighbour; the authoritative snap still occurs on drop.
+          engineNow.movePiece(gesture.g, group.ox + snap.dx * 0.18,
+            group.oy + snap.dy * 0.18, myId);
+        }
         renderer.snapPreview = snap
           ? { groupId: gesture.g, ox: group.ox + snap.dx, oy: group.oy + snap.dy }
           : null;
@@ -659,6 +711,9 @@ export function PuzzleBoard({
           engineNow.credit.set(myId, creditBefore);
           engineNow.release(gesture.g, myId);
 
+          if (result.merges.length && 'vibrate' in navigator) {
+            navigator.vibrate?.(12);
+          }
           for (const merge of result.merges) {
             renderer?.pulse(merge.into);
             // Keyed on the merge itself, because the server will echo this same
@@ -775,6 +830,26 @@ export function PuzzleBoard({
       )}
 
       <div ref={overlayRef} className="pointer-events-none absolute inset-0 overflow-hidden">
+        {engine.pieceCount > 0 && <div data-secret-piece={(engine.puzzle.seed >>> 4) % engine.pieceCount}
+          className="pointer-events-none absolute top-0 left-0 z-10 text-lg opacity-70 drop-shadow-lg"
+          style={{transform:'translate3d(-9999px,-9999px,0)', animation:'puzzly-mystery-glow 2s ease-in-out infinite'}}>
+          ✦
+        </div>}
+        {session.moments.filter(m => Date.now() - m.at < 4500).map(m => (
+          <div key={m.id} className="pointer-events-none absolute inset-x-4 top-1/4 z-30 flex justify-center">
+            <span className="rounded-full border border-amber-400/50 bg-[var(--surface)]/95 px-5 py-3 text-sm font-semibold shadow-2xl"
+              style={{animation:'puzzly-moment-pop 1s ease-in-out infinite alternate'}}>
+              {m.kind === 'combo' ? '✨' : m.kind === 'high-five' ? '🙌' : '🌟'} {m.label}
+            </span>
+          </div>
+        ))}
+        {session.stickers.map(sticker => (
+          <div key={sticker.id} data-world data-wx={sticker.x} data-wy={sticker.y}
+            className="pointer-events-none absolute top-0 left-0 z-20 text-4xl"
+            style={{animation:'puzzly-sticker-pop 10s ease-out forwards'}}>
+            {sticker.symbol}
+          </div>
+        ))}
         {session.pings.map((ping) => (
           <div
             key={ping.id}
@@ -836,8 +911,9 @@ export function PuzzleBoard({
 /* -------------------------------------------------------------------------- */
 
 /** The canvas cannot read CSS variables, so hand it resolved colours. */
-function readTheme(): RendererTheme {
-  const style = getComputedStyle(document.documentElement);
+function readTheme(canvas?: HTMLCanvasElement | null): RendererTheme {
+  const root = canvas?.closest('[data-room-theme]') ?? document.documentElement;
+  const style = getComputedStyle(root);
   const pick = (name: string, fallback: string) =>
     style.getPropertyValue(name).trim() || fallback;
   return {

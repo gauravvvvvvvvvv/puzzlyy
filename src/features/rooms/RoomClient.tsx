@@ -129,7 +129,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
   /* --- persistent room shell ----------------------------------------------- */
 
   const frame = (content: ReactNode) => (
-    <div className="flex h-[100dvh] min-w-0 overflow-hidden">
+    <div data-room-theme={room?.theme ?? "cozy"} className="flex h-[100dvh] min-w-0 overflow-hidden">
       <main className={'relative min-w-0 flex-1 ' +
         (phase === 'playing' ? 'overflow-hidden' : 'overflow-y-auto')}>
         {showNextPuzzle && phase !== 'playing'
@@ -183,6 +183,9 @@ export function RoomClient({ code, solo }: RoomClientProps) {
           solo={result.players.length < 2}
           onPlayAgain={playAgain}
           canPlayAgain={isHost}
+          achievements={session.achievements}
+          moments={session.moments}
+          dailyKey={session.room?.dailyKey}
         />
       </div>
     );
@@ -218,7 +221,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
         puzzle={puzzle}
         atlas={cut.atlas}
         image={cut.image}
-        solo={players.length < 2}
+        solo={players.filter(p => !p.spectator).length < 2}
         onLeave={leave}
       />
     );

@@ -138,6 +138,7 @@ export interface Player {
   /** Emoji avatar, chosen at join time. Cheap identity with zero uploads. */
   avatar: string;
   isHost: boolean;
+  spectator?: boolean;
   ready: boolean;
   connected: boolean;
   joinedAt: number;
@@ -163,6 +164,43 @@ export interface TugState {
   endsAt: number;
 }
 
+export type RoomTheme = 'cozy' | 'arcade' | 'space' | 'beach';
+export interface MusicTrack {
+  id: string;
+  provider: 'youtube' | 'spotify';
+  mediaId: string;
+  title: string;
+  addedBy: string;
+}
+export interface MusicState {
+  queue: MusicTrack[];
+  current: number;
+  playing: boolean;
+  position: number;
+  updatedAt: number;
+}
+export interface RoomSticker {
+  id: string;
+  playerId: string;
+  symbol: string;
+  x: number;
+  y: number;
+  at: number;
+}
+export interface RoomMoment {
+  id: string;
+  kind: 'mystery' | 'combo' | 'high-five' | 'golden';
+  playerId: string;
+  at: number;
+  label: string;
+}
+export interface RoomAchievement {
+  playerId: string;
+  name: string;
+  type: 'first' | 'streak' | 'helper' | 'closer';
+  at: number;
+}
+
 export type RoomStatus = 'lobby' | 'playing' | 'complete' | 'abandoned';
 
 export interface RoomSettings extends PuzzleSettings {
@@ -186,6 +224,8 @@ export interface Room {
   expiresAt: number;
   /** Number of puzzles played together without changing the invite URL. */
   round?: number;
+  theme?: RoomTheme;
+  dailyKey?: string;
 }
 
 /** Room + the data a client needs to render the lobby, in one payload. */
@@ -198,6 +238,10 @@ export interface RoomView {
   chat?: ChatMessage[];
   tugs?: TugState[];
   history?: SessionResult[];
+  music?: MusicState;
+  stickers?: RoomSticker[];
+  moments?: RoomMoment[];
+  achievements?: RoomAchievement[];
 }
 
 /* -------------------------------------------------------------------------- */

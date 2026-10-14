@@ -84,6 +84,7 @@ export function PuzzleRoom({
 
   /** "Look here" has been asked for and is waiting for a spot on the board. */
   const [pingArmed, setPingArmed] = useState(false);
+  const [stickerArmed, setStickerArmed] = useState<string | null>(null);
 
   // Sound starts on and is corrected after mount, because the stored preference
   // and `prefers-reduced-motion` both live in the browser and the server renders
@@ -160,6 +161,11 @@ export function PuzzleRoom({
     if (complete) return;
     setPingArmed((armed) => !armed);
   }, [complete]);
+
+  const placeSticker = useCallback((symbol: string, point: {x: number; y: number}) => {
+    setStickerArmed(null);
+    session.stickerNow(symbol,point.x,point.y);
+  }, [session.stickerNow]);
 
   const placePing = useCallback(
     (point: { x: number; y: number } | null) => {
@@ -283,7 +289,8 @@ export function PuzzleRoom({
     [engine, myId, subscribe],
   );
 
-  const roster = useMemo(() => [...players].sort((a, b) => a.joinedAt - b.joinedAt), [players]);
+  const roster = useMemo(() => players.filter(p=>!p.spectator)
+    .sort((a,b)=>a.joinedAt-b.joinedAt), [players]);
 
   /* ---------------------------------------------------------------------- */
 
@@ -364,8 +371,10 @@ export function PuzzleRoom({
           ghost={ghost}
           grid={grid}
           edgeFocus={edgeFocus}
-          frozen={complete}
+          frozen={complete || Boolean(session.me?.spectator)}
           pingArmed={pingArmed}
+          stickerArmed={stickerArmed}
+          onPlaceSticker={placeSticker}
           onPlacePing={placePing}
           onError={setBoardError}
           onActed={noteAction}
@@ -385,7 +394,7 @@ export function PuzzleRoom({
         )}
 
         <div className="panel absolute top-3 left-3 hidden w-52 p-2 lg:block">
-          <PresenceRail players={players} myId={myId} variant="board" />
+          <PresenceRail players={roster} myId={myId} variant="board" />
         </div>
 
         <Minimap
@@ -429,6 +438,7 @@ export function PuzzleRoom({
           onUndo={undo}
           onRedo={redo}
           onReact={react}
+          onSticker={setStickerArmed}
           onPing={ping}
           pingArmed={pingArmed}
           ghost={ghost}
@@ -440,7 +450,7 @@ export function PuzzleRoom({
           sound={sound}
           onSound={toggleSound}
           onLeave={onLeave}
-          hidden={complete}
+          hidden={complete || Boolean(session.me?.spectator)}
         />
 
         {/* ---- messages ---------------------------------------------------- */}
