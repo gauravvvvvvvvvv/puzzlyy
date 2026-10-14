@@ -50,7 +50,10 @@ function MediaTile({ stream, label, muted = false }: {
  * and puzzle changes. Voice/video permissions are requested only on click.
  * WebRTC carries the media; authenticated room events carry signaling.
  */
-export function RoomSocial({ session, code, onLeave }: { session: RoomSession; code: string; onLeave: () => void }) {
+export function RoomSocial({ session, code, onLeave, themePreview, onThemePreview }: {
+  session: RoomSession; code: string; onLeave: () => void;
+  themePreview?: string | null; onThemePreview?: (theme: 'cozy' | 'arcade' | 'space' | 'beach') => void;
+}) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const { copied, copy, share, canShare } = useClipboard();
@@ -391,11 +394,11 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
             className="mt-1 text-2xs text-[var(--fg-muted)] underline underline-offset-2">{callExpanded ? 'Minimize call' : 'Expand call'}</button>}
         </header>
         <details className="border-b border-[var(--line)] px-3 py-3">
-          <summary className="cursor-pointer text-sm font-medium">Room theme · {session.room?.theme ?? 'cozy'}</summary>
+          <summary className="cursor-pointer text-sm font-medium">Room theme · {themePreview ?? session.room?.theme ?? 'cozy'}</summary>
           <div className="mt-3 flex flex-wrap gap-2">
             {(['cozy', 'arcade', 'space', 'beach'] as const).map(theme => (
               <button key={theme} type="button" disabled={!session.isHost}
-                onClick={() => { session.send({ t: 'theme', theme }); session.flush(); }}
+                onClick={() => { onThemePreview?.(theme); session.send({ t: 'theme', theme }); session.flush(); }}
                 aria-pressed={(session.room?.theme ?? 'cozy') === theme}
                 className={'rounded-lg border px-3 py-2 text-xs capitalize transition active:scale-95 '+
                   ((session.room?.theme ?? 'cozy') === theme ? 'border-[var(--accent)] bg-[var(--accent-soft)]' :
