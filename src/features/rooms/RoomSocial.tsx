@@ -382,15 +382,15 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
                     'border-[var(--line)] hover:bg-[var(--surface-inset)]')}>{theme}</button>
             ))}
           </div>
-          {!session.isHost && <p className="mt-1 text-xs text-[var(--fg-muted)]">The host chooses the room theme.</p>}
+          <p className="mt-2 text-xs text-[var(--fg-muted)]">{session.isHost ? 'Shared with everyone in this room. Only the host can change it.' : 'Shared with everyone. The host chooses the room theme.'}</p>
         </details>
         {session.me?.spectator && <p className="border-b border-[var(--line)] bg-sky-400/10 px-3 py-2 text-xs text-sky-300">Spectator mode: watch, chat, react, and listen with friends. Puzzle pieces are read-only.</p>}
         <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] p-3">
           <button type="button" onClick={() => {
             const url = window.location.origin + '/room/' + code + '?watch=1';
-            void copy(url, 'spectate');
+            void copy(url, 'spectate').then(ok => { if (!ok) setInviteError(true); });
           }} className="rounded-lg border border-[var(--line)] px-3 py-2 text-xs transition hover:bg-[var(--surface-inset)] active:scale-95">
-            Invite spectators
+            {copied === 'spectate' ? 'Spectator link copied' : 'Invite spectators'}
           </button>
           <span className="text-2xs text-[var(--fg-subtle)]">
             {session.players.filter(p=>!p.spectator).length}/6 playing ·
