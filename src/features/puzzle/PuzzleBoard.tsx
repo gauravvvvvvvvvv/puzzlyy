@@ -747,6 +747,15 @@ export function PuzzleBoard({
     [myId, refreshStats, rendererRef, send],
   );
 
+  const rotateHeld = useCallback((dir: 1 | -1) => {
+    const gesture = gestureRef.current;
+    if (gesture.kind !== 'drag') return;
+    engineRef.current.rotatePiece(gesture.g, dir, pointerRef.current, myId);
+    send({ t: 'rotate', g: gesture.g, dir });
+    onActedRef.current();
+    rendererRef.current?.invalidate();
+  }, [myId, pointerRef, rendererRef, send]);
+
   /* --- rotation ---------------------------------------------------------- */
 
   useEffect(() => {
@@ -781,6 +790,16 @@ export function PuzzleBoard({
 
   return (
     <div className="relative size-full overflow-hidden" style={{ background: 'var(--board-bg)' }}>
+      {engine.puzzle.settings.rotation && (
+        <div className="pointer-events-auto absolute bottom-24 left-3 z-30 flex gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)]/95 p-1.5 shadow-lg sm:bottom-20"
+          role="group" aria-label="Rotate the piece you are holding">
+          <button type="button" onClick={() => rotateHeld(-1)} aria-label="Rotate held piece left"
+            className="min-h-11 min-w-11 rounded-lg border border-[var(--line)] text-sm font-semibold hover:bg-[var(--surface-inset)] active:scale-95">↶</button>
+          <button type="button" onClick={() => rotateHeld(1)} aria-label="Rotate held piece right"
+            className="min-h-11 min-w-11 rounded-lg border border-[var(--line)] text-sm font-semibold hover:bg-[var(--surface-inset)] active:scale-95">↷</button>
+          <span className="hidden self-center px-1 text-xs text-[var(--fg-muted)] sm:inline">Hold a piece · Q/E</span>
+        </div>
+      )}
       <canvas
         ref={canvasRef}
         // `touch-none` is what makes dragging possible on a phone: without it the
