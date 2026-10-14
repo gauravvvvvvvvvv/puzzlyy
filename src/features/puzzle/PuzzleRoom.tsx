@@ -24,6 +24,7 @@ import { BoardToolbar } from '@/features/puzzle/BoardToolbar';
 import { Minimap } from '@/features/puzzle/Minimap';
 import { PuzzleBoard } from '@/features/puzzle/PuzzleBoard';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
+import { useClipboard } from '@/hooks/useClipboard';
 import type { RoomSession } from '@/hooks/useRoomSession';
 import { formatDuration } from '@/lib/format';
 import type { PuzzleEngine } from '@/lib/puzzle/engine';
@@ -55,6 +56,18 @@ export function PuzzleRoom({
   onLeave,
 }: PuzzleRoomProps) {
   const reducedMotion = useReducedMotion();
+  const { copied, copy, share, canShare } = useClipboard();
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [inviteError, setInviteError] = useState(false);
+  useEffect(() => { setInviteUrl(`${window.location.origin}/room/${session.room?.code ?? ''}`); }, [session.room?.code]);
+  const invite = useCallback(async () => {
+    if (!inviteUrl) return;
+    setInviteError(false);
+    const ok = canShare
+      ? await share({ title: 'Puzzly', text: `Join my puzzle, ${puzzle.title}!`, url: inviteUrl }, 'invite')
+      : await copy(inviteUrl, 'invite');
+    if (!ok && !canShare) setInviteError(true);
+  }, [canShare, copy, inviteUrl, puzzle.title, share]);
   const rendererRef = useRef<PuzzleRenderer | null>(null);
   const pointerRef = useRef({ x: 0, y: 0 });
   const hintAtRef = useRef(0);
@@ -321,6 +334,15 @@ export function PuzzleRoom({
         </ul>
 
         <ConnectionBadge status={connection} className="shrink-0" />
+        <button type="button" onClick={() => void invite()} disabled={!inviteUrl}
+          title={inviteUrl || 'Invite someone to this room'}
+          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--line-strong)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--fg)] transition hover:border-[var(--accent)] hover:bg-[var(--surface-inset)] active:scale-95 disabled:opacity-50"
+          aria-label="Invite another player to this room">
+          <Icon name={copied === 'invite' ? 'check' : 'share'} size={18} />
+          <span className="hidden sm:inline">{copied === 'invite' ? 'Copied!' : 'Invite'}</span>
+        </button>
+        {inviteError && <span role="status" className="sr-only">Could not copy automatically. The link is {inviteUrl}</span>}
+
 
 
       </header>
