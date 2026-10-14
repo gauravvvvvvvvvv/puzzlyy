@@ -279,15 +279,16 @@ export function PuzzleRoom({
 
   /* --- undo availability -------------------------------------------------- */
 
-  useEffect(
-    () =>
-      subscribe(() => {
-        // Cheap and honest: the local journal is a good enough proxy for "there
-        // is something to take back", and the server corrects us if not.
-        if (engine.canUndo(myId)) setActed(true);
-      }),
-    [engine, myId, subscribe],
-  );
+  useEffect(() => {
+    // A rejoining player may already have an authoritative undo journal.
+    // Initialize controls from the restored engine, not only from future events.
+    setActed(engine.canUndo(myId));
+    setRedoDepth(engine.canRedo(myId) ? 1 : 0);
+    return subscribe(() => {
+      setActed(engine.canUndo(myId));
+      setRedoDepth(engine.canRedo(myId) ? 1 : 0);
+    });
+  }, [engine, myId, subscribe]);
 
   const roster = useMemo(() => players.filter(p=>!p.spectator)
     .sort((a,b)=>a.joinedAt-b.joinedAt), [players]);
