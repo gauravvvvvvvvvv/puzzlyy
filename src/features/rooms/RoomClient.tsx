@@ -45,6 +45,17 @@ export function RoomClient({ code, solo }: RoomClientProps) {
     session;
   const { send, flush } = session;
   const [showNextPuzzle, setShowNextPuzzle] = useState(false);
+  const [themePreview, setThemePreview] = useState<string | null>(null);
+  // A host's palette changes on the very first frame, not after the API round trip.
+  // Authoritative room events reconcile it, with a timeout if an update is rejected.
+  useEffect(() => {
+    if (themePreview && room?.theme === themePreview) setThemePreview(null);
+  }, [room?.theme, themePreview]);
+  useEffect(() => {
+    if (!themePreview) return;
+    const timer = window.setTimeout(() => setThemePreview(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [themePreview]);
 
   /* --- cutting the pieces -------------------------------------------------- */
 
@@ -132,7 +143,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
   /* --- persistent room shell ----------------------------------------------- */
 
   const frame = (content: ReactNode) => (
-    <div data-room-theme={room?.theme ?? "cozy"} className="flex h-[100dvh] min-w-0 overflow-hidden">
+    <div data-room-theme={themePreview ?? room?.theme ?? "cozy"} className="flex h-[100dvh] min-w-0 overflow-hidden">
       <main className={'relative min-w-0 flex-1 ' +
         (phase === 'playing' ? 'overflow-hidden' : 'overflow-y-auto')}>
         {showNextPuzzle && phase !== 'playing'
@@ -145,7 +156,7 @@ export function RoomClient({ code, solo }: RoomClientProps) {
           </button>
         )}
       </main>
-      <RoomSocial session={session} code={code} onLeave={leave} />
+      <RoomSocial session={session} code={code} onLeave={leave} themePreview={themePreview} onThemePreview={setThemePreview} />
     </div>
   );
 
