@@ -782,7 +782,7 @@ export function PuzzleBoard({
 
     if (event.key.toLowerCase() === 'n') {
       event.preventDefault();
-      const groups = [...current.groups.keys()].sort((a, b) => a - b);
+      const groups = current.groupList.map(group => group.id).sort((a, b) => a - b);
       if (!groups.length) return;
       const start = selected === null ? -1 : groups.indexOf(selected);
       finish();
@@ -792,7 +792,7 @@ export function PuzzleBoard({
         if (current.grab(id, myId) === null) continue;
         keyboardGroupRef.current = id;
         const group = current.getGroup(id);
-        if (group) renderer.lookAt(group.ox, group.oy);
+        if (group && group.pieces.length) { const point = current.pieceWorld(group.pieces[0]); renderer.lookAt(point.x, point.y); }
         renderer.draggingGroup = id;
         send({ t: 'grab', g: id });
         renderer.invalidate();
