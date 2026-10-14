@@ -184,6 +184,18 @@ export function RoomJukebox({session}:{session:RoomSession}) {
     };
   },[trackId,mediaId,isYouTube,expanded,emit]);
 
+  // Script loading may succeed while an embedded video itself never becomes
+  // ready (blocked privacy extensions, provider errors, or restricted networks).
+  // Never strand the user on a perpetual spinner.
+  useEffect(() => {
+    if (!isYouTube || playerReady || fallback || !expanded) return;
+    const timeout = window.setTimeout(() => {
+      setFallback(true);
+      setPlayerError('Embedded player timed out. Try the fallback or open YouTube.');
+    }, 11000);
+    return () => window.clearTimeout(timeout);
+  }, [isYouTube, playerReady, fallback, expanded, trackId]);
+
   // Apply authoritative track position on track changes and host commands, not
   // on every rendering frame. Do not issue autoplay repeatedly.
   useEffect(()=>{
@@ -212,8 +224,8 @@ export function RoomJukebox({session}:{session:RoomSession}) {
   };
 
   const hostAction=(action:'play'|'pause'|'next')=>{
-    if(action==='play')playLocal(true);
-    else if(action==='pause')playLocal(false);
+    if(track?.provider==='youtube' && action==='play')playLocal(true);
+    else if(track?.provider==='youtube' && action==='pause')playLocal(false);
     emit(action);
   };
   const add=(e:FormEvent<HTMLFormElement>)=>{
