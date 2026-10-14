@@ -393,6 +393,39 @@ export function RoomSocial({ session, code, onLeave, themePreview, onThemePrevie
           {hasMedia && <button type="button" onClick={() => setCallExpanded(value => !value)}
             className="mt-1 text-2xs text-[var(--fg-muted)] underline underline-offset-2">{callExpanded ? 'Minimize call' : 'Expand call'}</button>}
         </header>
+        <details className="border-b border-[var(--line)] px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium">
+            People · {session.players.filter(p => !p.spectator).length} playing · {session.players.filter(p => p.spectator).length} watching
+          </summary>
+          <ul className="mt-2 max-h-64 space-y-1 overflow-y-auto" aria-label="Room participants">
+            {session.players.map(person => (
+              <li key={person.id} className="flex min-w-0 items-center gap-2 rounded-lg bg-[var(--surface-inset)] px-2 py-1.5">
+                <span aria-hidden="true" className="text-lg">{person.avatar}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-semibold">{person.name}{person.id === session.myId ? ' (you)' : ''}</span>
+                  <span className="block text-2xs text-[var(--fg-muted)]">
+                    {person.isHost ? 'Host' : person.spectator ? 'Spectator' : 'Player'} · {person.connected ? 'Online' : 'Away'}
+                  </span>
+                </span>
+                {session.isHost && person.id !== session.myId && !person.isHost && (
+                  <button type="button" aria-label={'Kick ' + person.name + ' from room'}
+                    onClick={() => {
+                      if (window.confirm('Remove ' + person.name + ' from this room?')) {
+                        session.send({ t: 'kick', playerId: person.id });
+                        session.flush();
+                      }
+                    }}
+                    className="min-h-9 shrink-0 rounded-lg border border-[var(--line)] px-2.5 text-xs text-[var(--color-danger-400)] hover:bg-[var(--surface-2)]">
+                    Kick
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          {session.isHost && <p className="mt-2 text-2xs text-[var(--fg-muted)]">
+            Removed members lose this seat and cannot resume it by refreshing.
+          </p>}
+        </details>
         <details className="border-b border-[var(--line)] px-3 py-3">
           <summary className="cursor-pointer text-sm font-medium">Room theme · {themePreview ?? session.room?.theme ?? 'cozy'}</summary>
           <div className="mt-3 flex flex-wrap gap-2">
