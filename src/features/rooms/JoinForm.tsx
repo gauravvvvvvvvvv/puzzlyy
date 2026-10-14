@@ -51,7 +51,7 @@ export function JoinForm({ initialCode = '', autoFocus = true }: JoinFormProps) 
     } catch (cause) {
       setError(
         cause instanceof ApiError && cause.status === 404
-          ? 'No room with that code. Rooms clear themselves after a day — ask for a fresh link.'
+          ? 'No room with that code. Rooms expire after prolonged inactivity — ask for a fresh link.'
           : cause instanceof ApiError
             ? cause.message
             : 'We could not reach the room. Check your connection and try again.',
@@ -82,7 +82,7 @@ export function JoinForm({ initialCode = '', autoFocus = true }: JoinFormProps) 
             spellCheck={false}
             inputMode="text"
             aria-invalid={raw.length >= 7 && !code}
-            aria-describedby="room-code-hint"
+            aria-describedby="room-code-hint room-code-error"
             className="num h-13 w-full rounded-lg border border-[var(--line-strong)] bg-[var(--surface-inset)] px-4 text-xl tracking-[0.18em] uppercase outline-none placeholder:text-[var(--fg-subtle)] placeholder:tracking-[0.18em] focus-visible:border-[var(--accent)]"
           />
         </div>
@@ -96,6 +96,11 @@ export function JoinForm({ initialCode = '', autoFocus = true }: JoinFormProps) 
         Six characters, in two groups of three. You can paste the whole invite link instead.
       </p>
 
+      {raw.length >= 7 && !code && !error && (
+        <p id="room-code-error" role="alert" className="mt-2 text-sm text-[var(--color-danger-400)]">
+          Enter a valid six-character code such as ABX-729. Codes do not use 0, 1, I, O, or S.
+        </p>
+      )}
       {error ? (
         <p role="alert" className="mt-4 rounded-md border border-[color-mix(in_oklab,var(--color-danger-500)_40%,transparent)] px-3 py-2 text-sm text-[var(--color-danger-400)]">
           {error}
