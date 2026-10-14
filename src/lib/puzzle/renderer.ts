@@ -495,6 +495,8 @@ export class PuzzleRenderer {
 
       if (pulseT !== undefined) {
         const t = clamp((now - pulseT) / PULSE_MS, 0, 1);
+        ctx.shadowColor = this.theme.accent;
+        ctx.shadowBlur = Math.sin(t * Math.PI) * 22 / this.camera.scale;
         const k = 1 + Math.sin(t * Math.PI) * 0.035;
         const c = this.solvedCenter(group);
         ctx.translate(c.x, c.y);

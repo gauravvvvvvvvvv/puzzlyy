@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-type Scene = 'off' | 'rain' | 'ocean' | 'fireplace';
+import { roomWorld } from '@/lib/theme/roomWorlds';
+type Scene = 'off' | 'rain' | 'ocean' | 'fireplace' | 'synth';
 
 /** All audio is synthesized on-device. Playback only begins after a click. */
-export function AmbientSoundscape() {
+export function AmbientSoundscape({roomTheme}:{roomTheme?:string}) {
   const [scene, setScene] = useState<Scene>('off');
   const [volume, setVolume] = useState(.22);
   const audio = useRef<{ ctx: AudioContext; gain: GainNode; source: AudioBufferSourceNode } | null>(null);
@@ -51,10 +52,11 @@ export function AmbientSoundscape() {
 
   useEffect(() => { if (audio.current) audio.current.gain.gain.value = volume; }, [volume]);
 
+  const suggested = roomWorld(roomTheme).sound as Scene;
   return <section className="border-t border-[var(--line)] px-3 py-3" aria-label="Ambient soundscapes">
     <p className="mb-2 text-xs font-medium text-[var(--fg)]">Ambient sounds <span className="font-normal text-[var(--fg-subtle)]">· only you hear these</span></p>
     <div className="flex flex-wrap gap-1.5" role="group" aria-label="Choose background ambience">
-      {(['off','rain','ocean','fireplace'] as const).map(key =>
+      {(['off','rain','ocean','fireplace','synth'] as const).map(key =>
         <button type="button" key={key} aria-pressed={scene === key}
           onClick={() => setScene(key)}
           className={'min-h-9 rounded-lg border px-3 text-xs capitalize transition-colors active:scale-95 ' +
@@ -62,6 +64,7 @@ export function AmbientSoundscape() {
           {key === 'off' ? 'Off' : key}
         </button>)}
     </div>
+    <button type="button" className="mt-2 text-xs underline underline-offset-2 text-[var(--fg-muted)]" onClick={() => setScene(suggested)}>Try {roomWorld(roomTheme).name} ambience ({suggested})</button>
     {scene !== 'off' && <label className="mt-2 flex items-center gap-2 text-xs text-[var(--fg-muted)]">
       Volume
       <input type="range" aria-label="Ambient sound volume" min={0} max={1} step={.05}
