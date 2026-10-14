@@ -152,7 +152,7 @@ export function Completion({
           </div>}
         </div>
 
-        <FriendshipScrapbook />
+        <FriendshipScrapbook latest={result} />
 
         {/* Who placed what. Bars rather than a table, because the shape of the
             collaboration is the interesting part. */}
