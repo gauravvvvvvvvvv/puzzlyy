@@ -345,8 +345,8 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
       {open && <button type="button" onClick={() => setOpen(false)}
         className="fixed inset-0 z-40 bg-black/35 lg:hidden" aria-label="Close room chat" />}
       <aside className={(open ? 'flex fixed inset-y-0 right-0 z-50 w-[min(94vw,420px)]' : 'hidden') +
-        ' lg:static lg:z-auto lg:flex lg:w-[min(30vw,380px)] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)] shadow-xl lg:shadow-none'}>
-        <header className="flex items-center justify-between border-b border-[var(--line)] p-3">
+        ' lg:static lg:z-auto lg:flex lg:w-[min(30vw,380px)] shrink-0 min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-contain border-l border-[var(--line)] bg-[var(--surface)] shadow-xl lg:shadow-none'}>
+        <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--surface)] p-3">
           <div><p className="text-sm font-semibold">Room chat</p>
             <p className="text-2xs text-[var(--fg-subtle)]">Room {code} · round {session.room?.round ?? 1}</p>
           </div>
@@ -460,7 +460,7 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
             className="grid size-10 place-items-center rounded-lg text-xl transition hover:bg-[var(--surface-inset)] active:scale-90">{emoji}</button>)}
         </div>}
         <AmbientSoundscape roomTheme={session.room?.theme} />
-        <div ref={pane} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3" aria-label="Room messages" role="log" aria-live="polite" aria-relevant="additions" onScroll={event => { const el = event.currentTarget; nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 72; }}>
+        <div ref={pane} className="flex min-h-48 max-h-[45dvh] shrink-0 flex-col gap-2 overflow-y-auto overscroll-contain p-3" aria-label="Room messages" role="log" aria-live="polite" aria-relevant="additions" onScroll={event => { const el = event.currentTarget; nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 72; }}>
           {session.chat.length === 0 && <p className="mx-auto max-w-[16rem] py-8 text-center text-xs leading-relaxed text-[var(--fg-muted)]">
             Your conversation stays here when you play the next puzzle.
           </p>}
@@ -508,7 +508,7 @@ export function RoomSocial({ session, code, onLeave }: { session: RoomSession; c
           </details>
         )}
         <button type="button" onClick={onLeave} className="mx-3 mb-2 flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--line)] text-sm text-[var(--color-danger-400)] transition hover:bg-[var(--surface-inset)] active:scale-95"><Icon name="arrow-left" size={18} />Leave room</button>
-        <form onSubmit={sendMessage} className="flex gap-2 border-t border-[var(--line)] p-3">
+        <form onSubmit={sendMessage} className="sticky bottom-0 z-10 flex shrink-0 gap-2 border-t border-[var(--line)] bg-[var(--surface)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <textarea rows={1} value={message} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} onChange={e => {
             setMessage(e.target.value);
             if (Date.now() - typingAt.current > 900) {
